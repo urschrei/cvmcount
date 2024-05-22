@@ -11,7 +11,6 @@ pub fn open_file<P>(filename: P) -> BufReader<File>
 where
     P: AsRef<Path>,
 {
-    // no need to use a BufReader since we want the entire file
     let f = File::open(filename).expect("Couldn't read from file");
     BufReader::new(f)
 }
