@@ -1,0 +1,32 @@
+[package]
+name = "cvmcount"
+description = "use the CVM algorithm to quickly estimate the number of tokens in a stream"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/urschrei/cvmcount" 
+
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+rand = "0.8.5"
+regex = "1.10.4"
+clap = { version = "4.5.4", features = ["cargo"] }
+
+[lib]
+name = "cvmcount"
+path = "src/lib.rs"
+doctest = false
+
+[[bin]]
+name = "cvmcount"
+path = "src/main.rs"
+test = false
+
+[profile.release]
+lto = true
+codegen-units = 1
+
+[profile.bench]
+lto = true
+codegen-units = 1
