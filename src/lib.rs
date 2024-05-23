@@ -46,7 +46,7 @@ impl CVM {
             // I think this will be faster than a hashset for practical sizes
             // but I need some empirical data for this
             if let Some(pos) = self.buf.iter().position(|x| *x == clean_word) {
-                self.buf.swap_remove(pos);
+                self.buf.remove(pos);
             }
             if self.rng.gen_bool(self.probability) {
                 self.buf.push(clean_word);
