@@ -30,8 +30,8 @@ impl CVM {
     pub fn new(epsilon: f64, delta: f64, stream_size: usize) -> Self {
         let bufsize = buffer_size(epsilon, delta, stream_size);
         Self {
-            buf_size: bufsize as usize,
-            buf: Vec::with_capacity(bufsize as usize),
+            buf_size: bufsize,
+            buf: Vec::with_capacity(bufsize),
             probability: 1.0,
             rng: rand::thread_rng(),
             re: Regex::new(r"[^\w\s]").unwrap(),
@@ -71,6 +71,6 @@ impl CVM {
 }
 
 // Calculate threshold (buf_size) value for the F0-Estimator algorithm
-fn buffer_size(epsilon: f64, delta: f64, stream_size: usize) -> u32 {
-    ((12.0 / epsilon.powf(2.0)) * ((8.0 * stream_size as f64) / delta).log2()).ceil() as u32
+fn buffer_size(epsilon: f64, delta: f64, stream_size: usize) -> usize {
+    ((12.0 / epsilon.powf(2.0)) * ((8.0 * stream_size as f64) / delta).log2()).ceil() as usize
 }
