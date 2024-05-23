@@ -6,10 +6,16 @@ This library implements the algorithm described in
 
 The accompanying article in Quanta is here: https://www.quantamagazine.org/computer-scientists-invent-an-efficient-new-way-to-count-20240516/
 
+# Installation
+`cvmcount` binaries are available for x64 Linux, Apple Silicon and Intel, and x64 Windows:
+
+`curl --proto '=https' --tlsv1.2 -LsSf https://github.com/urschrei/cvmcount/releases/download/v0.1.2/cvmcount-installer.sh | sh`
+
+Binaries are available in [releases](releases), or you can build your own if you have Rust installed: `cargo install cvmcount`.
+
 # CLI Example
 
 ```shell
-cargo install cvmcount
 cvmcount -t file.txt -e 0.8 -d 0.1 -s 2900
 ```
 `-t --tokens`: a valid path to a text file
