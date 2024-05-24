@@ -9,8 +9,12 @@ The accompanying article in Quanta is here: https://www.quantamagazine.org/compu
 ## What does that mean
 The count-distinct problem, or cardinality-estimation problem refers to counting the number of distinct elements in a data stream with repeated elements. As a concrete example, imagine that you want to count the unique words in a book. If you have enough memory, you can keep track of every unique element you encounter. However, you may not have enough working memory due to resource constraints, or the number of potential elements may be enormous. This constraint is referred to as the bounded-storage constraint in the literature.
 
-
 In order to overcome this constraint, streaming algorithms have been developed: [Flajolet-Martin](https://en.wikipedia.org/wiki/Flajolet–Martin_algorithm), LogLog, [HyperLogLog](https://en.wikipedia.org/wiki/HyperLogLog). The algorithm implemented by this library is an improvement on these in one particular sense: it is extremely simple. Instead of hashing, it uses a sampling method to compute an [unbiased estimate](https://www.statlect.com/glossary/unbiased-estimator#:~:text=An%20estimator%20of%20a%20given,Examples) of the cardinality.
+
+# What is an Element
+In this implementation, an element is anything implementing the [`PartialOrd`](https://doc.rust-lang.org/std/cmp/trait.PartialOrd.html) and [`PartialEQ`](https://doc.rust-lang.org/std/cmp/trait.PartialEq.html) traits: various integer flavours, strings, any Struct on which you have implemented the traits. Not `f32` / `f64`, however.
+
+You will also note that I didn't mention `&str`: that's because the buffer has to keep ownership of its elements. In practice, this is not a problem: relative to its input stream size, the buffer is very small.
 
 ## Further Details
 Don Knuth has written about the algorithm (he refers to it as **Algorithm D**) at https://cs.stanford.edu/~knuth/papers/cvm-note.pdf, and does a far better job than I do at explaining it. You will note that on p1 he describes the buffer he uses as a data structure called a [treap](https://en.wikipedia.org/wiki/Treap#:~:text=7%20External%20links-,Description,(randomly%20chosen)%20numeric%20priority.)
@@ -19,6 +23,9 @@ Don Knuth has written about the algorithm (he refers to it as **Algorithm D**) a
 This implementation doesn't use a treap as a buffer; it uses a Vec and performs a binary search during step **D4**. Note in particular his modification of step **D6** on p5: **D6'**: halving the buffer.
 
 I may switch to a treap implementation eventually; for many practical applications a binary search is considerably faster than the hashing algorithms under consideration. If your application assumes a buffer containing 100k+ elements, you may wish to consider using a treap.
+
+# What does this library provide
+Two things: the crate / library, and a command-line utility (`cvmcount`) which will count the unique strings in an input text file.
 
 # Installation
 Binaries and installation instructions are available for x64 Linux, Apple Silicon and Intel, and x64 Windows in [releases](https://github.com/urschrei/cvmcount/releases)

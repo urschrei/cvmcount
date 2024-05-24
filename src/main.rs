@@ -1,4 +1,5 @@
 use clap::{arg, crate_version, value_parser, Command};
+use regex::Regex;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -13,6 +14,14 @@ where
 {
     let f = File::open(filename).expect("Couldn't read from file");
     BufReader::new(f)
+}
+
+fn line_to_word(re: &Regex, cvm: &mut CVM<String>, line: &str) {
+    let words = line.split(' ');
+    words.for_each(|word| {
+        let clean_word = re.replace_all(word, "").to_lowercase();
+        cvm.process_element(clean_word)
+    })
 }
 
 fn main() {
@@ -35,16 +44,17 @@ fn main() {
             .required(true)
             .value_parser(value_parser!(usize)))
         .get_matches();
+
     let input_file = params.get_one::<PathBuf>("tokens").unwrap();
     let epsilon = params.get_one::<f64>("epsilon").unwrap();
     let delta = params.get_one::<f64>("delta").unwrap();
     let stream_size = params.get_one::<usize>("streamsize").unwrap();
+    let mut counter: CVM<String> = CVM::new(*epsilon, *delta, *stream_size);
+    let re = Regex::new(r"[^\w\s]").unwrap();
 
-    let mut counter = CVM::new(*epsilon, *delta, *stream_size);
     let br = open_file(input_file);
-    for line in br.lines() {
-        counter.process_line_tokens(line.unwrap())
-    }
+    br.lines()
+        .for_each(|line| line_to_word(&re, &mut counter, &line.unwrap()));
     println!(
         "Unique tokens: {:?}",
         counter.calculate_final_result() as i32
