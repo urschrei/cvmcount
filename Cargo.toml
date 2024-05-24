@@ -5,7 +5,7 @@ readme = "README.md"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/urschrei/cvmcount" 
 documentation = "https://docs.rs/cvmcount"
-keywords = ["CVM", "count-distinct", "cardinality-estimation"]
+keywords = ["CVM", "count-distinct", "estimation"]
 categories = ["algorithms", ]
 
 version = "0.1.6"
