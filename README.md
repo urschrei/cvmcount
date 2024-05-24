@@ -54,4 +54,4 @@ If you're thinking about using this library, you presumably know that it only pr
 Calculating the unique tokens in a [418K UTF-8 text file](https://www.gutenberg.org/ebooks/8492) takes 18.6 ms ± 0.3 ms on an M2 Pro
 
 ## Implementation Details
-This library strips punctuation from input tokens using a regex. I assume there is a small performance penalty, but it seems like a small price to pay for increased practicality.
+The CLI app strips punctuation from input tokens using a regex. I assume there is a small performance penalty, but it seems like a small price to pay for increased practicality.
