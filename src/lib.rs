@@ -5,6 +5,8 @@ use rand::rngs::ThreadRng;
 use rand::Rng;
 
 /// A counter implementing the CVM algorithm
+///
+/// Note that the CVM struct's buffer takes ownership of its elements.
 pub struct CVM<T: PartialOrd + PartialEq> {
     buf_size: usize,
     buf: Vec<T>,
@@ -26,7 +28,7 @@ impl<T: PartialOrd + PartialEq> CVM<T> {
     /// A delta of 0.1 is a good starting point for most applications.
     ///
     /// stream_size: this is used to determine buffer size and can be a loose approximation. The closer it is to the stream size,
-    /// the more accurate the result will be
+    /// the more accurate the result will be.
     pub fn new(epsilon: f64, delta: f64, stream_size: usize) -> Self {
         let bufsize = buffer_size(epsilon, delta, stream_size);
         Self {
@@ -36,7 +38,7 @@ impl<T: PartialOrd + PartialEq> CVM<T> {
             rng: rand::thread_rng(),
         }
     }
-    /// Count elements, updating the current unique count
+    /// Add an element, potentially updating the unique element count
     pub fn process_element(&mut self, elem: T) {
         // binary search should be pretty fast
         // I think this will be faster than a hashset for practical sizes

@@ -14,13 +14,13 @@ In order to overcome this constraint, streaming algorithms have been developed: 
 # What is an Element
 In this implementation, an element is anything implementing the [`PartialOrd`](https://doc.rust-lang.org/std/cmp/trait.PartialOrd.html) and [`PartialEQ`](https://doc.rust-lang.org/std/cmp/trait.PartialEq.html) traits: various integer flavours, strings, any Struct on which you have implemented the traits. Not `f32` / `f64`, however.
 
-You will also note that I didn't mention `&str`: that's because the buffer has to keep ownership of its elements. In practice, this is not a problem: relative to its input stream size, the buffer is very small. This is also the entire point of the algorithm: your data set is very large; you **don't** want to keep the original data around in order to store references to it!
+You will also note that I didn't mention `&str`: that's because the buffer has to keep ownership of its elements. In practice, this is not a problem: relative to its input stream size, the buffer is very small. This is also the entire point of the algorithm: your data set is very large; you **don't** want to keep the original data around in order to store references to it! Thus, if you have `&str` elements you will need to create new `String`s from them to store them. Of course, if you're processing text data you'll probably want to strip punctuation and regularise the case, so you'll need new `Strings` anyway. If you're processing strings containing numeric values, parsing them to the appropriate integer type (which implements `Copy`) seems like a reasonable approach.
 
 ## Further Details
-Don Knuth has written about the algorithm (he refers to it as **Algorithm D**) at https://cs.stanford.edu/~knuth/papers/cvm-note.pdf, and does a far better job than I do at explaining it. You will note that on p1 he describes the buffer he uses as a data structure called a [treap](https://en.wikipedia.org/wiki/Treap#:~:text=7%20External%20links-,Description,(randomly%20chosen)%20numeric%20priority.)
-> "that’s capable of holding up to _s_ ordered pairs (_a_, _u_), where _a_ is an element of the stream and _u_ is a real number, 0 ≤ _u_ < 1.", where _s_ >= 1.
+Don Knuth has written about the algorithm (he refers to it as **Algorithm D**) at https://cs.stanford.edu/~knuth/papers/cvm-note.pdf, and does a far better job than I do at explaining it. You will note that on p1 he describes the buffer he uses as a data structure – called a [treap](https://en.wikipedia.org/wiki/Treap#:~:text=7%20External%20links-,Description,(randomly%20chosen)%20numeric%20priority.) – as a binary tree
+> "that’s capable of holding up to _s_ ordered pairs (_a_, _u_), where _a_ is an element of the stream and _u_ is a real number, 0 ≤ _u_ < 1."
 
-This implementation doesn't use a treap as a buffer; it uses a Vec and performs a binary search during step **D4**. Note in particular his modification of step **D6** on p5: **D6'**: halving the buffer.
+where _s_ >= 1. This implementation doesn't use a treap as a buffer; it uses a Vec and performs a binary search during step **D4**. Note in particular his modification of step **D6** on p5: **D6'**: halving the buffer.
 
 I may switch to a treap implementation eventually; for many practical applications a binary search is considerably faster than the hashing algorithms under consideration. If your application assumes a buffer containing 100k+ elements, you may wish to consider using a treap.
 

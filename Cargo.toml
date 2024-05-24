@@ -4,6 +4,9 @@ description = "use the CVM algorithm to quickly estimate the number of distinct 
 readme = "README.md"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/urschrei/cvmcount" 
+documentation = "https://docs.rs/cvmcount"
+keywords = ["CVM", "count-distinct", "cardinality-estimation"]
+categories = ["algorithms", ]
 
 version = "0.1.6"
 edition = "2021"
