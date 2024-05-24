@@ -14,7 +14,7 @@ You can also build your own if you have Rust installed: `cargo install cvmcount`
 # CLI Example
 
 ```shell
-cvmcount -t file.txt -e 0.8 -d 0.1 -s 2900
+cvmcount -t file.txt -e 0.8 -d 0.1 -s 5000
 ```
 `-t --tokens`: a valid path to a text file
 
