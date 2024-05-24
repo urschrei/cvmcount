@@ -4,13 +4,14 @@
 use rand::rngs::ThreadRng;
 use rand::Rng;
 
+/// A counter implementing the CVM algorithm
 pub struct CVM<T: PartialOrd + PartialEq> {
     buf_size: usize,
     buf: Vec<T>,
     probability: f64,
     rng: ThreadRng,
 }
-/// A counter implementing the CVM algorithm
+
 impl<T: PartialOrd + PartialEq> CVM<T> {
     /// Initialise the algorithm
     ///
