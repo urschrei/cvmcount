@@ -14,7 +14,7 @@ In order to overcome this constraint, streaming algorithms have been developed: 
 # What is an Element
 In this implementation, an element is anything implementing the [`PartialOrd`](https://doc.rust-lang.org/std/cmp/trait.PartialOrd.html) and [`PartialEQ`](https://doc.rust-lang.org/std/cmp/trait.PartialEq.html) traits: various integer flavours, strings, any Struct on which you have implemented the traits. Not `f32` / `f64`, however.
 
-You will also note that I didn't mention `&str`: that's because the buffer has to keep ownership of its elements. In practice, this is not a problem: relative to its input stream size, the buffer is very small.
+You will also note that I didn't mention `&str`: that's because the buffer has to keep ownership of its elements. In practice, this is not a problem: relative to its input stream size, the buffer is very small. This is also the entire point of the algorithm: your data set is very large; you **don't** want to keep the original data around in order to store references to it!
 
 ## Further Details
 Don Knuth has written about the algorithm (he refers to it as **Algorithm D**) at https://cs.stanford.edu/~knuth/papers/cvm-note.pdf, and does a far better job than I do at explaining it. You will note that on p1 he describes the buffer he uses as a data structure called a [treap](https://en.wikipedia.org/wiki/Treap#:~:text=7%20External%20links-,Description,(randomly%20chosen)%20numeric%20priority.)
