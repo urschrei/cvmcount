@@ -51,12 +51,9 @@ impl CVM {
             if self.rng.gen_bool(self.probability) {
                 self.buf.push(clean_word);
             }
-            if self.buf.len() == self.buf_size {
+            while self.buf.len() == self.buf_size {
                 self.clear_about_half();
                 self.probability /= 2.0;
-                if self.buf.len() == self.buf_size {
-                    panic!("Something has gone proper wrong")
-                }
             }
         }
     }
