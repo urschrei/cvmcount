@@ -40,9 +40,9 @@ impl<T: PartialOrd + PartialEq> CVM<T> {
     }
     /// Add an element, potentially updating the unique element count
     pub fn process_element(&mut self, elem: T) {
-        // binary search should be pretty fast
+        // linear search
         // I think this will be faster than a hashset for practical sizes
-        // but I need some empirical data for this
+        // Should really switch to a treap as per Knuth
         if let Some(pos) = self.buf.iter().position(|x| *x == elem) {
             self.buf.swap_remove(pos);
         }

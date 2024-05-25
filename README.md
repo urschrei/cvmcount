@@ -21,9 +21,9 @@ The buffer has to keep ownership of its elements. In practice, this is not a pro
 Don Knuth has written about the algorithm (he refers to it as **Algorithm D**) at https://cs.stanford.edu/~knuth/papers/cvm-note.pdf, and does a far better job than I do at explaining it. You will note that on p1 he describes the buffer he uses as a data structure – called a [treap](https://en.wikipedia.org/wiki/Treap#:~:text=7%20External%20links-,Description,(randomly%20chosen)%20numeric%20priority.) – as a binary tree
 > "that’s capable of holding up to _s_ ordered pairs (_a_, _u_), where _a_ is an element of the stream and _u_ is a real number, 0 ≤ _u_ < 1."
 
-where _s_ >= 1. This implementation doesn't use a treap as a buffer; it uses a Vec and performs a binary search during step **D4**. Note in particular his modification of step **D6** on p5: **D6'**: halving the buffer.
+where _s_ >= 1. Our implementation doesn't use a treap as a buffer; it uses a Vec and performs a linear search during step **D4**.
 
-I may switch to a treap implementation eventually; for many practical applications a binary search is considerably faster than the hashing algorithms under consideration. If your application assumes a buffer containing 100k+ elements, you may wish to consider using a treap.
+I may switch to a treap implementation eventually; for many practical applications a linear search is considerably faster than e.g. a HashSet. If your application assumes a a large buffer such that linear search will be too slow, you may wish to consider using a treap.
 
 # What does this library provide
 Two things: the crate / library, and a command-line utility (`cvmcount`) which will count the unique strings in an input text file.
