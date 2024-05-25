@@ -16,6 +16,10 @@ rand = "0.8.5"
 regex = "1.10.4"
 clap = { version = "4.5.4", features = ["cargo"] }
 
+[dev-dependencies]
+rand = "0.8.5"
+criterion = "0.5.1"
+
 [lib]
 name = "cvmcount"
 path = "src/lib.rs"
@@ -38,6 +42,10 @@ codegen-units = 1
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+[[bench]]
+name = "benchmarks"
+harness = false
 
 # Config for 'cargo dist'
 [workspace.metadata.dist]

@@ -8,7 +8,7 @@ use std::path::PathBuf;
 
 use cvmcount::CVM;
 
-pub fn open_file<P>(filename: P) -> BufReader<File>
+fn open_file<P>(filename: P) -> BufReader<File>
 where
     P: AsRef<Path>,
 {
