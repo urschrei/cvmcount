@@ -45,7 +45,8 @@ impl<T: PartialOrd + PartialEq + Eq + Hash> CVM<T> {
     pub fn process_element(&mut self, elem: T) {
         // We should switch to a treap (as per Knuth) to avoid the hash overhead, but FxHash
         // is still a lot faster than linear searching a Vec, even at small (1000) buffer sizes
-        self.buf.remove(&elem);
+        // Sets are guaranteed to be unique so no need to check for membership
+        // In the first "round", until the set is "full", elements are inserted with probability 1, i.e. always
         if self.rng.gen_bool(self.probability) {
             self.buf.insert(elem);
         }
