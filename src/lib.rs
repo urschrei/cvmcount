@@ -45,7 +45,12 @@ impl<T: PartialOrd + PartialEq + Eq + Hash> CVM<T> {
     pub fn process_element(&mut self, elem: T) {
         // We should switch to a treap (as per Knuth) to avoid the hash overhead, but FxHash
         // is still a lot faster than linear searching a Vec, even at small (1000) buffer sizes
-        self.buf.remove(&elem);
+        // Round 0: if an element exists, remove it. Element is added back due to probability 1
+        // When buffer is full, remove half the elements
+        // Round 1: if an element exists, remove it. Element MAY be added back due to probability 0.5
+        if self.buf.get(&elem).is_some() {
+            self.buf.remove(&elem);
+        }
         if self.rng.gen_bool(self.probability) {
             self.buf.insert(elem);
         }
