@@ -8,13 +8,14 @@ documentation = "https://docs.rs/cvmcount"
 keywords = ["CVM", "count-distinct", "estimation"]
 categories = ["algorithms", ]
 
-version = "0.1.6"
+version = "0.1.7"
 edition = "2021"
 
 [dependencies]
 rand = "0.8.5"
 regex = "1.10.4"
 clap = { version = "4.5.4", features = ["cargo"] }
+rustc-hash = "1.1.0"
 
 [dev-dependencies]
 rand = "0.8.5"

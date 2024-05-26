@@ -4,17 +4,20 @@
 use rand::rngs::ThreadRng;
 use rand::Rng;
 
+use rustc_hash::FxHashSet;
+use std::hash::Hash;
+
 /// A counter implementing the CVM algorithm
 ///
 /// Note that the CVM struct's buffer takes ownership of its elements.
-pub struct CVM<T: PartialOrd + PartialEq> {
+pub struct CVM<T: PartialOrd + PartialEq + Eq + Hash> {
     buf_size: usize,
-    buf: Vec<T>,
+    buf: FxHashSet<T>,
     probability: f64,
     rng: ThreadRng,
 }
 
-impl<T: PartialOrd + PartialEq> CVM<T> {
+impl<T: PartialOrd + PartialEq + Eq + Hash> CVM<T> {
     /// Initialise the algorithm
     ///
     /// epsilon: how close you want your estimate to be to the true number of distinct elements.
@@ -33,21 +36,18 @@ impl<T: PartialOrd + PartialEq> CVM<T> {
         let bufsize = buffer_size(epsilon, delta, stream_size);
         Self {
             buf_size: bufsize,
-            buf: Vec::with_capacity(bufsize),
+            buf: FxHashSet::with_capacity_and_hasher(bufsize, Default::default()),
             probability: 1.0,
             rng: rand::thread_rng(),
         }
     }
     /// Add an element, potentially updating the unique element count
     pub fn process_element(&mut self, elem: T) {
-        // linear search
-        // I think this will be faster than a hashset for practical sizes
-        // Should really switch to a treap as per Knuth
-        if let Some(pos) = self.buf.iter().position(|x| *x == elem) {
-            self.buf.swap_remove(pos);
-        }
+        // We should switch to a treap (as per Knuth) to avoid the hash overhead, but FxHash
+        // is still a lot faster than linear searching a Vec, even at small (1000) buffer sizes
+        self.buf.remove(&elem);
         if self.rng.gen_bool(self.probability) {
-            self.buf.push(elem);
+            self.buf.insert(elem);
         }
         while self.buf.len() == self.buf_size {
             self.clear_about_half();
