@@ -48,7 +48,7 @@ impl<T: PartialOrd + PartialEq + Eq + Hash> CVM<T> {
         // Round 0: if an element exists, remove it. Element is added back due to probability 1
         // When buffer is full, remove half the elements
         // Round 1: if an element exists, remove it. Element MAY be added back due to probability 0.5
-        if self.buf.get(&elem).is_some() {
+        if self.buf.contains(&elem) {
             self.buf.remove(&elem);
         }
         if self.rng.gen_bool(self.probability) {

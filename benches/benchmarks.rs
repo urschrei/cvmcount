@@ -14,10 +14,10 @@ use regex::Regex;
 // generate 1 million 7-digit random positive integers
 fn generate_random_numbers() -> Vec<i32> {
     let mut rng = thread_rng();
-    let numbers = (0..1_000_000)
+
+    (0..1_000_000)
         .map(|_| rng.gen_range(1_000_000..10_000_000))
-        .collect();
-    numbers
+        .collect()
 }
 
 fn open_file<P>(filename: P) -> BufReader<File>
@@ -39,7 +39,7 @@ fn line_to_word(re: &Regex, cvm: &mut CVM<String>, line: &str) {
 #[allow(unused_must_use)]
 fn bench_count_strings_integers(c: &mut Criterion) {
     c.bench_function(
-        &format!("Count unique strings in The King in Yellow with regex regularization: e = 0.8, d = 0.1, s = 1000"),
+        "Count unique strings in The King in Yellow with regex regularization: e = 0.8, d = 0.1, s = 1000",
         |b| {
             let input_file = "benches/kiy.txt";
             let epsilon = 0.8;
@@ -56,7 +56,7 @@ fn bench_count_strings_integers(c: &mut Criterion) {
         },
     );
     c.bench_function(
-        &format!("Count uniques in ten million 7-digit random positive integers: e = 0.8, d = 0.1, s = 1000"),
+        "Count uniques in ten million 7-digit random positive integers: e = 0.8, d = 0.1, s = 1000",
         |b| {
             let epsilon = 0.8;
             let delta = 0.1;
