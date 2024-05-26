@@ -10,14 +10,14 @@ use std::hash::Hash;
 /// A counter implementing the CVM algorithm
 ///
 /// Note that the CVM struct's buffer takes ownership of its elements.
-pub struct CVM<T: PartialOrd + PartialEq + Eq + Hash> {
+pub struct CVM<T: PartialEq + Eq + Hash> {
     buf_size: usize,
     buf: FxHashSet<T>,
     probability: f64,
     rng: ThreadRng,
 }
 
-impl<T: PartialOrd + PartialEq + Eq + Hash> CVM<T> {
+impl<T: PartialEq + Eq + Hash> CVM<T> {
     /// Initialise the algorithm
     ///
     /// epsilon: how close you want your estimate to be to the true number of distinct elements.
