@@ -25,11 +25,13 @@ criterion = "0.5.1"
 name = "cvmcount"
 path = "src/lib.rs"
 doctest = false
+bench = false
 
 [[bin]]
 name = "cvmcount"
 path = "src/main.rs"
 test = false
+bench = false
 
 [profile.release]
 lto = true
