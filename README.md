@@ -49,6 +49,15 @@ The `--help` option is available.
 ## Analysis
 
 ![](cvmcount.png)
+```text
+Mean: 9015.744000
+Std: 534.076058
+Min 7552.000000
+25% 8672.000000
+50% 9024.000000
+75% 9344.000000
+Max 11072.00000
+```
 
 ## Note
 If you're thinking about using this library, you presumably know that it only provides an estimate (within the specified bounds), similar to something like HyperLogLog. You are trading accuracy for speed!
