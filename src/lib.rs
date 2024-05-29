@@ -73,3 +73,41 @@ impl<T: PartialEq + Eq + Hash> CVM<T> {
 fn buffer_size(epsilon: f64, delta: f64, stream_size: usize) -> usize {
     ((12.0 / epsilon.powf(2.0)) * ((8.0 * stream_size as f64) / delta).log2()).ceil() as usize
 }
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        fs::File,
+        io::{BufRead, BufReader},
+        path::Path,
+    };
+
+    use super::*;
+    use regex::Regex;
+
+    fn open_file<P>(filename: P) -> BufReader<File>
+    where
+        P: AsRef<Path>,
+    {
+        let f = File::open(filename).expect("Couldn't read from file");
+        BufReader::new(f)
+    }
+
+    fn line_to_word(re: &Regex, hs: &mut FxHashSet<String>, line: &str) {
+        let words = line.split(' ');
+        words.for_each(|word| {
+            let clean_word = re.replace_all(word, "").to_lowercase();
+            hs.insert(clean_word);
+        })
+    }
+    #[test]
+    fn actual() {
+        let input_file = "benches/kiy.txt";
+        let re = Regex::new(r"[^\w\s]").unwrap();
+        let br = open_file(input_file);
+        let mut hs = FxHashSet::with_hasher(Default::default());
+        br.lines()
+            .for_each(|line| line_to_word(&re, &mut hs, &line.unwrap()));
+        assert_eq!(hs.len(), 9016)
+    }
+}
