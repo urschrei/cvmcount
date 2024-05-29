@@ -11,6 +11,8 @@ use cvmcount::CVM;
 use rand::{thread_rng, Rng};
 use regex::Regex;
 
+use rustc_hash::FxHashSet;
+
 // generate 1 million 7-digit random positive integers
 fn generate_random_numbers() -> Vec<i32> {
     let mut rng = thread_rng();
@@ -64,10 +66,25 @@ fn bench_count_strings_integers(c: &mut Criterion) {
             let digits = generate_random_numbers();
             b.iter(|| {
                 let mut int_counter: CVM<i32> = CVM::new(epsilon, delta, stream_size);
-                digits.iter().for_each(|integer| int_counter.process_element(*integer));
+                digits
+                    .iter()
+                    .for_each(|integer| int_counter.process_element(*integer));
                 int_counter.calculate_final_result()
             })
-        }
+        },
+    );
+    c.bench_function(
+        "Count uniques in ten million 7-digit random positive integers: HashSet",
+        |b| {
+            let digits = generate_random_numbers();
+            b.iter(|| {
+                let mut hs = FxHashSet::with_hasher(Default::default());
+                digits.iter().for_each(|digit| {
+                    hs.insert(digit);
+                });
+                digits.len()
+            })
+        },
     );
 }
 
