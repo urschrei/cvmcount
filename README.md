@@ -48,7 +48,7 @@ The `--help` option is available.
 
 ## Analysis
 
-![][cvmcount.png]
+![](cvmcount.png)
 
 ## Note
 If you're thinking about using this library, you presumably know that it only provides an estimate (within the specified bounds), similar to something like HyperLogLog. You are trading accuracy for speed!
