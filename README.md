@@ -46,6 +46,10 @@ cvmcount -t file.txt -e 0.8 -d 0.1 -s 5000
 
 The `--help` option is available.
 
+## Analysis
+
+![][cvmcount.png]
+
 ## Note
 If you're thinking about using this library, you presumably know that it only provides an estimate (within the specified bounds), similar to something like HyperLogLog. You are trading accuracy for speed!
 
@@ -54,3 +58,5 @@ Calculating the unique tokens in a [418K UTF-8 text file](https://www.gutenberg.
 
 ## Implementation Details
 The CLI app strips punctuation from input tokens using a regex. I assume there is a small performance penalty, but it seems like a small price to pay for increased practicality.
+
+ 
