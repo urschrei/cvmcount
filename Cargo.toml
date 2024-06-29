@@ -2,13 +2,13 @@
 name = "cvmcount"
 description = "use the CVM algorithm to quickly estimate the number of distinct elements in a stream"
 readme = "README.md"
-license = "MIT OR Apache-2.0"
+license = "BlueOak-1.0.0"
 repository = "https://github.com/urschrei/cvmcount" 
 documentation = "https://docs.rs/cvmcount"
 keywords = ["CVM", "count-distinct", "estimation"]
 categories = ["algorithms", ]
 
-version = "0.2.0"
+version = "0.3.0"
 edition = "2021"
 
 [dependencies]
