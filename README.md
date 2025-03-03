@@ -60,7 +60,7 @@ Max 11072.00000
 ```
 
 ## Note
-If you're thinking about using this library, you presumably know that it only provides an estimate (within the specified bounds), similar to something like HyperLogLog. You are trading accuracy for speed!
+If you're thinking about using this library, you presumably know that it only provides an estimate (within the specified bounds), similar to something like HyperLogLog. You are trading accuracy for speed and memory usage!
 
 ## Perf
 Calculating the unique tokens in a [418K UTF-8 text file](https://www.gutenberg.org/ebooks/8492) using the CLI takes 7.2 ms ± 0.3 ms on an M2 Pro. Counting 10e6 7-digit integers takes around 13.5 ms. An exact count using the same regex and HashSet runs in around 18 ms. Run `cargo bench` for more.
