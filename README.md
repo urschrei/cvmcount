@@ -46,6 +46,59 @@ cvmcount -t file.txt -e 0.8 -d 0.1 -s 5000
 
 The `--help` option is available.
 
+# Library Usage
+
+The library provides both a simple constructor and a builder pattern for more ergonomic usage:
+
+## Simple Constructor
+
+```rust
+use cvmcount::CVM;
+
+let mut cvm = CVM::new(0.05, 0.01, 10_000);
+for item in data_stream {
+    cvm.process_element(item);
+}
+let estimate = cvm.calculate_final_result();
+```
+
+## Builder Pattern (Recommended)
+
+The builder pattern provides better readability and validation:
+
+```rust
+use cvmcount::CVM;
+
+// Using defaults (epsilon=0.8, confidence=0.9, size=1000)
+let mut cvm: CVM<String> = CVM::builder().build().unwrap();
+
+// Custom configuration with confidence level
+let mut cvm: CVM<i32> = CVM::builder()
+    .epsilon(0.05)        // 5 % accuracy
+    .confidence(0.99)     // 99 % confidence
+    .estimated_size(50_000)
+    .build()
+    .unwrap();
+
+// Using delta (failure probability) instead of confidence
+let mut cvm: CVM<String> = CVM::builder()
+    .epsilon(0.1)         // 10 % accuracy
+    .delta(0.01)          // 1 % chance of failure
+    .estimated_size(1_000)
+    .build()
+    .unwrap();
+
+// Process your data
+for word in text.split_whitespace() {
+    cvm.process_element(word.to_string());
+}
+
+let estimate = cvm.calculate_final_result();
+println!("Estimated unique words: {}", estimate as usize);
+```
+
+The builder validates parameters and provides clear error messages for invalid inputs.
+
 ## Analysis
 
 ![](cvmcount.png)

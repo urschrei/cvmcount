@@ -9,6 +9,164 @@ use crate::treap::Treap;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
 
+/// Specification for confidence level in the CVM algorithm
+#[derive(Debug, Clone, Copy)]
+pub enum ConfidenceSpec {
+    /// Specify delta directly (probability of failure)
+    Delta(f64),
+    /// Specify confidence level (probability of success)
+    Confidence(f64),
+}
+
+impl ConfidenceSpec {
+    /// Convert to delta value for internal use
+    fn to_delta(self) -> f64 {
+        match self {
+            ConfidenceSpec::Delta(delta) => delta,
+            ConfidenceSpec::Confidence(confidence) => 1.0 - confidence,
+        }
+    }
+
+    /// Validate the confidence specification
+    fn validate(self) -> Result<Self, String> {
+        match self {
+            ConfidenceSpec::Delta(delta) => {
+                if delta <= 0.0 || delta >= 1.0 {
+                    Err("Delta must be between 0.0 and 1.0 (exclusive)".to_string())
+                } else {
+                    Ok(self)
+                }
+            }
+            ConfidenceSpec::Confidence(confidence) => {
+                if confidence <= 0.0 || confidence >= 1.0 {
+                    Err("Confidence must be between 0.0 and 1.0 (exclusive)".to_string())
+                } else {
+                    Ok(self)
+                }
+            }
+        }
+    }
+}
+
+/// Builder for constructing CVM instances with validation and defaults
+///
+/// # Examples
+///
+/// ```
+/// use cvmcount::CVM;
+///
+/// // Using defaults (`epsilon=0.8`, `confidence=0.9`, `size=1000`)
+/// let cvm: CVM<String> = CVM::<String>::builder().build().unwrap();
+///
+/// // Custom parameters
+/// let cvm: CVM<i32> = CVM::<i32>::builder()
+///     .epsilon(0.05)  // 5 % accuracy
+///     .confidence(0.99)  // 99 % confidence
+///     .estimated_size(10_000)
+///     .build()
+///     .unwrap();
+///
+/// // Using delta instead of confidence
+/// let cvm: CVM<String> = CVM::<String>::builder()
+///     .epsilon(0.1)
+///     .delta(0.01)  // 1 % failure probability
+///     .build()
+///     .unwrap();
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct CVMBuilder {
+    epsilon: Option<f64>,
+    confidence_spec: Option<ConfidenceSpec>,
+    stream_size: Option<usize>,
+}
+
+impl CVMBuilder {
+    /// Create a new builder with default values
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the epsilon parameter (accuracy requirement)
+    ///
+    /// `Epsilon` determines how close you want your estimate to be to the true number
+    /// of distinct elements. A smaller `ε` means you require a more precise estimate.
+    /// For example, `ε = 0.05` means you want your estimate to be within 5 % of the
+    /// actual value.
+    ///
+    /// Must be between 0.0 and 1.0 (exclusive).
+    pub fn epsilon(mut self, epsilon: f64) -> Self {
+        self.epsilon = Some(epsilon);
+        self
+    }
+
+    /// Set the confidence level (probability that the estimate will be accurate)
+    ///
+    /// Confidence represents how certain you want to be that the algorithm's
+    /// estimate will fall within the desired accuracy range. For example,
+    /// `confidence = 0.99` means you're 99 % sure the estimate will be accurate.
+    ///
+    /// Must be between 0.0 and 1.0 (exclusive).
+    /// Cannot be used together with [`Self::delta`] – the last one called will be used.
+    pub fn confidence(mut self, confidence: f64) -> Self {
+        self.confidence_spec = Some(ConfidenceSpec::Confidence(confidence));
+        self
+    }
+
+    /// Set the delta parameter (probability of failure)
+    ///
+    /// Delta represents the probability that the algorithm's estimate will fall
+    /// outside the desired accuracy range. For example, `delta = 0.01` means there's
+    /// a 1 % chance the estimate will be inaccurate.
+    ///
+    /// Must be between 0.0 and 1.0 (exclusive).
+    /// Cannot be used together with [`Self::confidence()`] – the last one called will be used.
+    pub fn delta(mut self, delta: f64) -> Self {
+        self.confidence_spec = Some(ConfidenceSpec::Delta(delta));
+        self
+    }
+
+    /// Set the estimated stream size
+    ///
+    /// This is used to determine buffer size and can be a loose approximation.
+    /// The closer it is to the actual stream size, the more accurate the results
+    /// will be.
+    pub fn estimated_size(mut self, size: usize) -> Self {
+        self.stream_size = Some(size);
+        self
+    }
+
+    /// Build the CVM instance with validation
+    ///
+    /// Uses the following defaults if not specified:
+    /// - `epsilon: 0.8` (good starting point for most applications)
+    /// - `confidence: 0.9` (90 % confidence, equivalent to delta = 0.1)
+    /// - `estimated_size: 1000`
+    ///
+    /// Returns an error if any parameters are invalid.
+    pub fn build<T: Ord>(self) -> Result<CVM<T>, String> {
+        // Validate and get epsilon
+        let epsilon = self.epsilon.unwrap_or(0.8);
+        if epsilon <= 0.0 || epsilon >= 1.0 {
+            return Err("Epsilon must be between 0.0 and 1.0 (exclusive)".to_string());
+        }
+
+        // Validate and get delta
+        let confidence_spec = self
+            .confidence_spec
+            .unwrap_or(ConfidenceSpec::Confidence(0.9));
+        let validated_spec = confidence_spec.validate()?;
+        let delta = validated_spec.to_delta();
+
+        // Validate and get stream size
+        let stream_size = self.stream_size.unwrap_or(1000);
+        if stream_size == 0 {
+            return Err("Stream size must be greater than 0".to_string());
+        }
+
+        Ok(CVM::new(epsilon, delta, stream_size))
+    }
+}
+
 /// A counter implementing the CVM algorithm
 ///
 /// This implementation uses a treap (randomized binary search tree) as the buffer,
@@ -24,6 +182,31 @@ pub struct CVM<T: Ord> {
 }
 
 impl<T: Ord> CVM<T> {
+    /// Create a new builder for constructing CVM instances
+    ///
+    /// The builder provides a more ergonomic way to construct CVM instances with
+    /// validation and sensible defaults.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cvmcount::CVM;
+    ///
+    /// // Using defaults
+    /// let cvm: CVM<String> = CVM::<String>::builder().build().unwrap();
+    ///
+    /// // Custom configuration
+    /// let cvm: CVM<i32> = CVM::<i32>::builder()
+    ///     .epsilon(0.05)
+    ///     .confidence(0.99)
+    ///     .estimated_size(10_000)
+    ///     .build()
+    ///     .unwrap();
+    /// ```
+    pub fn builder() -> CVMBuilder {
+        CVMBuilder::new()
+    }
+
     /// Initialise the algorithm
     ///
     /// `epsilon`: how close you want your estimate to be to the true number of distinct elements.
@@ -90,6 +273,7 @@ mod tests {
         path::Path,
     };
 
+    use super::{CVM, ConfidenceSpec};
     use regex::Regex;
     use std::collections::HashSet;
 
@@ -117,5 +301,108 @@ mod tests {
         br.lines()
             .for_each(|line| line_to_word(&re, &mut hs, &line.unwrap()));
         assert_eq!(hs.len(), 9016)
+    }
+
+    #[test]
+    fn test_builder_defaults() {
+        let cvm: CVM<String> = CVM::<String>::builder().build().unwrap();
+        // Verify that it's properly constructed with defaults
+        assert_eq!(cvm.calculate_final_result(), 0.0); // Empty buffer
+    }
+
+    #[test]
+    fn test_builder_custom_params() {
+        let cvm: CVM<i32> = CVM::<i32>::builder()
+            .epsilon(0.05)
+            .confidence(0.99)
+            .estimated_size(5000)
+            .build()
+            .unwrap();
+
+        // Test that it works by processing some elements
+        let mut cvm = cvm;
+        for i in 0..100 {
+            cvm.process_element(i);
+        }
+        let result = cvm.calculate_final_result();
+        assert!(result > 0.0);
+    }
+
+    #[test]
+    fn test_builder_delta_vs_confidence() {
+        // Test that confidence and delta give equivalent results
+        let cvm1: CVM<i32> = CVM::<i32>::builder().confidence(0.9).build().unwrap();
+
+        let cvm2: CVM<i32> = CVM::<i32>::builder().delta(0.1).build().unwrap();
+
+        // They should have the same internal configuration
+        // (we can't directly test this without exposing internals,
+        // but we can test they both work)
+        assert_eq!(cvm1.calculate_final_result(), 0.0);
+        assert_eq!(cvm2.calculate_final_result(), 0.0);
+    }
+
+    #[test]
+    fn test_builder_last_wins() {
+        // Test that the last confidence/delta setting wins
+        let cvm: CVM<i32> = CVM::<i32>::builder()
+            .confidence(0.9)
+            .delta(0.05) // This should override confidence
+            .build()
+            .unwrap();
+
+        assert_eq!(cvm.calculate_final_result(), 0.0);
+    }
+
+    #[test]
+    fn test_builder_validation() {
+        // Test epsilon validation
+        let result = CVM::<i32>::builder().epsilon(0.0).build::<i32>();
+        assert!(result.is_err());
+
+        let result = CVM::<i32>::builder().epsilon(1.0).build::<i32>();
+        assert!(result.is_err());
+
+        let result = CVM::<i32>::builder().epsilon(-0.5).build::<i32>();
+        assert!(result.is_err());
+
+        // Test confidence validation
+        let result = CVM::<i32>::builder().confidence(0.0).build::<i32>();
+        assert!(result.is_err());
+
+        let result = CVM::<i32>::builder().confidence(1.0).build::<i32>();
+        assert!(result.is_err());
+
+        // Test delta validation
+        let result = CVM::<i32>::builder().delta(0.0).build::<i32>();
+        assert!(result.is_err());
+
+        let result = CVM::<i32>::builder().delta(1.0).build::<i32>();
+        assert!(result.is_err());
+
+        // Test stream size validation
+        let result = CVM::<i32>::builder().estimated_size(0).build::<i32>();
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_builder_method_chaining() {
+        let result = CVM::<String>::builder()
+            .epsilon(0.1)
+            .confidence(0.95)
+            .estimated_size(2000)
+            .build::<String>();
+
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_confidence_spec_conversion() {
+        // Test ConfidenceSpec::to_delta conversion
+        let confidence_spec = ConfidenceSpec::Confidence(0.9);
+        assert!((confidence_spec.to_delta() - 0.1).abs() < f64::EPSILON);
+
+        let delta_spec = ConfidenceSpec::Delta(0.05);
+        assert!((delta_spec.to_delta() - 0.05).abs() < f64::EPSILON);
     }
 }

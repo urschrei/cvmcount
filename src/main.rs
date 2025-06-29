@@ -1,4 +1,4 @@
-use clap::{arg, crate_version, value_parser, Command};
+use clap::{Command, arg, crate_version, value_parser};
 use regex::Regex;
 use std::fs::File;
 use std::io::BufRead;

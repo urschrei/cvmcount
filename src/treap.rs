@@ -255,8 +255,8 @@ impl<T: Ord> Default for Treap<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::rngs::StdRng;
     use rand::SeedableRng;
+    use rand::rngs::StdRng;
 
     #[test]
     fn test_insert_and_contains() {
