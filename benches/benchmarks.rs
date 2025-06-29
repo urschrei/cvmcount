@@ -11,7 +11,7 @@ use cvmcount::CVM;
 use rand::{thread_rng, Rng};
 use regex::Regex;
 
-use rustc_hash::FxHashSet;
+use std::collections::HashSet;
 
 // generate 1 million 7-digit random positive integers
 fn generate_random_numbers() -> Vec<i32> {
@@ -78,7 +78,7 @@ fn bench_count_strings_integers(c: &mut Criterion) {
         |b| {
             let digits = generate_random_numbers();
             b.iter(|| {
-                let mut hs = FxHashSet::with_hasher(Default::default());
+                let mut hs = HashSet::new();
                 digits.iter().for_each(|digit| {
                     hs.insert(digit);
                 });
