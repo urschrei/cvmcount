@@ -84,7 +84,7 @@ impl<T: Ord> Treap<T> {
 
     /// Insert a key with a random priority
     pub fn insert<R: Rng>(&mut self, key: T, rng: &mut R) {
-        let priority = rng.gen();
+        let priority = rng.r#gen();
         self.root = Self::insert_node(self.root.take(), key, priority);
         self.size += 1;
     }
