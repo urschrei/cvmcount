@@ -5,7 +5,7 @@ readme = "README.md"
 license = "BlueOak-1.0.0"
 repository = "https://github.com/urschrei/cvmcount" 
 documentation = "https://docs.rs/cvmcount"
-keywords = ["CVM", "count-distinct", "estimation"]
+keywords = ["CVM", "count-distinct", "estimation", "treap"]
 categories = ["algorithms", ]
 
 version = "0.3.1"
