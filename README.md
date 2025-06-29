@@ -99,6 +99,39 @@ println!("Estimated unique words: {}", estimate as usize);
 
 The builder validates parameters and provides clear error messages for invalid inputs.
 
+## Streaming Interface
+
+For processing iterators directly, you can use the streaming methods:
+
+```rust
+use cvmcount::{CVM, EstimateDistinct};
+
+// Process an entire iterator with CVM instance
+let mut cvm: CVM<i32> = CVM::builder().epsilon(0.05).build().unwrap();
+let numbers = vec![1, 2, 3, 2, 1, 4, 5];
+let estimate = cvm.process_stream(numbers);
+
+// Or use the iterator extension trait for one-liners
+let estimate = (1..=1000)
+    .cycle()
+    .take(10_000)
+    .estimate_distinct_count(0.1, 0.1, 10_000);
+
+// With builder pattern
+let words = vec!["hello".to_string(), "world".to_string(), "hello".to_string()];
+let builder = CVM::<String>::builder().epsilon(0.05).confidence(0.99);
+let estimate = words.into_iter().estimate_distinct_with_builder(builder).unwrap();
+
+// When working with borrowed data, map to owned explicitly
+let borrowed_words = vec!["hello", "world", "hello"];
+let estimate = borrowed_words
+    .iter()
+    .map(|s| s.to_string())
+    .estimate_distinct_count(0.1, 0.1, 1000);
+```
+
+The streaming interface accepts owned values to avoid cloning within the algorithm, making the ownership requirements explicit.
+
 ## Analysis
 
 ![](cvmcount.png)
