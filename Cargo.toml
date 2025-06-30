@@ -16,7 +16,7 @@ edition = "2024"
 rand = "0.8.5"
 regex = "1.10.4"
 clap = { version = "4.5.4", features = ["cargo"] }
-rustc-hash = "1.1.0"
+rustc-hash = "2.1.1"
 
 [dev-dependencies]
 rand = "0.8.5"
