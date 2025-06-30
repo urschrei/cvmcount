@@ -8,17 +8,17 @@ use std::{
 
 use criterion::Criterion;
 use cvmcount::CVM;
-use rand::{Rng, thread_rng};
+use rand::{Rng, rng};
 use regex::Regex;
 
 use std::collections::HashSet;
 
 // generate 1 million 7-digit random positive integers
 fn generate_random_numbers() -> Vec<i32> {
-    let mut rng = thread_rng();
+    let mut rng = rng();
 
     (0..1_000_000)
-        .map(|_| rng.gen_range(1_000_000..10_000_000))
+        .map(|_| rng.random_range(1_000_000..10_000_000))
         .collect()
 }
 
