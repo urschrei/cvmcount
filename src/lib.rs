@@ -6,8 +6,9 @@
 mod treap;
 
 use crate::treap::Treap;
+use rand::Rng;
+use rand::SeedableRng;
 use rand::rngs::StdRng;
-use rand::{Rng, SeedableRng};
 
 /// Specification for confidence level in the CVM algorithm
 #[derive(Debug, Clone, Copy)]
@@ -227,7 +228,7 @@ impl<T: Ord> CVM<T> {
             buf_size: bufsize,
             buf: Treap::new(),
             probability: 1.0,
-            rng: StdRng::from_entropy(),
+            rng: StdRng::from_os_rng(),
         }
     }
     /// Add an element, potentially updating the unique element count
@@ -240,7 +241,7 @@ impl<T: Ord> CVM<T> {
         if self.buf.contains(&elem) {
             self.buf.remove(&elem);
         }
-        if self.rng.gen_bool(self.probability) {
+        if self.rng.random_bool(self.probability) {
             self.buf.insert(elem, &mut self.rng);
         }
         while self.buf.len() == self.buf_size {
@@ -252,7 +253,7 @@ impl<T: Ord> CVM<T> {
     fn clear_about_half(&mut self) {
         // Need to capture rng reference to use in closure
         let rng = &mut self.rng;
-        self.buf.retain(|_| rng.gen_bool(0.5));
+        self.buf.retain(|_| rng.random_bool(0.5));
     }
     /// Process an entire iterator of owned values and return the final estimate
     ///
