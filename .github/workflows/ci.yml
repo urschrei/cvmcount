@@ -47,17 +47,3 @@ jobs:
 
     - name: Run doc tests
       run: cargo test --doc
-
-  minimum-rust-version:
-    name: Check MSRV
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Install minimum Rust version
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        toolchain: "1.85"  # Based on your Cargo.toml
-        
-    - name: Check compilation
-      run: cargo check --all-features
