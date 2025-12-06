@@ -271,6 +271,34 @@ mod tests {
     use rand::SeedableRng;
     use rand::rngs::StdRng;
 
+    // Helper: collect keys via in-order traversal (should yield sorted order for valid BST)
+    fn collect_inorder<T: Ord + Clone>(node: &Option<Box<Node<T>>>) -> Vec<T> {
+        match node {
+            None => vec![],
+            Some(n) => {
+                let mut result = collect_inorder(&n.left);
+                result.push(n.key.clone());
+                result.extend(collect_inorder(&n.right));
+                result
+            }
+        }
+    }
+
+    // Helper: verify max-heap property (parent priority >= child priorities)
+    fn verify_heap_property<T: Ord>(node: &Option<Box<Node<T>>>) -> bool {
+        match node {
+            None => true,
+            Some(n) => {
+                let left_ok = n.left.as_ref().is_none_or(|l| n.priority >= l.priority);
+                let right_ok = n.right.as_ref().is_none_or(|r| n.priority >= r.priority);
+                left_ok
+                    && right_ok
+                    && verify_heap_property(&n.left)
+                    && verify_heap_property(&n.right)
+            }
+        }
+    }
+
     #[test]
     fn test_insert_and_contains() {
         let mut treap = Treap::new();
@@ -351,5 +379,169 @@ mod tests {
         assert_eq!(treap.len(), 2);
         assert!(treap.insert(5, &mut rng)); // Re-insertion returns true
         assert_eq!(treap.len(), 3);
+    }
+
+    #[test]
+    fn test_bst_property() {
+        let mut treap = Treap::new();
+        let mut rng = StdRng::seed_from_u64(123);
+
+        // Insert elements in random order
+        let elements = vec![50, 25, 75, 10, 30, 60, 90, 5, 15, 27, 35];
+        for elem in &elements {
+            treap.insert(*elem, &mut rng);
+        }
+
+        // In-order traversal should yield sorted keys
+        let inorder = collect_inorder(&treap.root);
+        let mut sorted = elements.clone();
+        sorted.sort();
+        assert_eq!(inorder, sorted);
+
+        // Test after some removals
+        treap.remove(&25);
+        treap.remove(&75);
+        let inorder_after = collect_inorder(&treap.root);
+        let expected: Vec<i32> = sorted.into_iter().filter(|&x| x != 25 && x != 75).collect();
+        assert_eq!(inorder_after, expected);
+    }
+
+    #[test]
+    fn test_heap_property() {
+        let mut treap = Treap::new();
+        let mut rng = StdRng::seed_from_u64(456);
+
+        // Insert many elements
+        for i in 0..100 {
+            treap.insert(i, &mut rng);
+            assert!(
+                verify_heap_property(&treap.root),
+                "Heap property violated after inserting {}",
+                i
+            );
+        }
+
+        // Test after removals
+        for i in (0..100).step_by(3) {
+            treap.remove(&i);
+            assert!(
+                verify_heap_property(&treap.root),
+                "Heap property violated after removing {}",
+                i
+            );
+        }
+
+        // Test after retain
+        treap.retain(|&x| x % 2 == 0);
+        assert!(
+            verify_heap_property(&treap.root),
+            "Heap property violated after retain"
+        );
+    }
+
+    #[test]
+    fn test_stress_insert_remove() {
+        let mut treap = Treap::new();
+        let mut rng = StdRng::seed_from_u64(789);
+
+        // Insert 1000 elements
+        for i in 0..1000 {
+            treap.insert(i, &mut rng);
+        }
+        assert_eq!(treap.len(), 1000);
+
+        // Verify all elements present
+        for i in 0..1000 {
+            assert!(treap.contains(&i), "Element {} should be present", i);
+        }
+
+        // Remove every other element
+        for i in (0..1000).step_by(2) {
+            assert!(treap.remove(&i), "Should remove {}", i);
+        }
+        assert_eq!(treap.len(), 500);
+
+        // Verify correct elements remain
+        for i in 0..1000 {
+            if i % 2 == 0 {
+                assert!(!treap.contains(&i), "Element {} should be removed", i);
+            } else {
+                assert!(treap.contains(&i), "Element {} should remain", i);
+            }
+        }
+
+        // Re-insert removed elements
+        for i in (0..1000).step_by(2) {
+            assert!(treap.insert(i, &mut rng), "Should insert {}", i);
+        }
+        assert_eq!(treap.len(), 1000);
+
+        // Verify invariants
+        let inorder = collect_inorder(&treap.root);
+        let expected: Vec<i32> = (0..1000).collect();
+        assert_eq!(inorder, expected);
+        assert!(verify_heap_property(&treap.root));
+    }
+
+    #[test]
+    fn test_empty_tree_operations() {
+        let mut treap: Treap<i32> = Treap::new();
+        let mut rng = StdRng::seed_from_u64(999);
+
+        // Operations on empty treap
+        assert!(treap.is_empty());
+        assert_eq!(treap.len(), 0);
+        assert!(!treap.contains(&42));
+        assert!(!treap.remove(&42));
+
+        // Retain on empty treap (should be no-op)
+        treap.retain(|_| true);
+        assert!(treap.is_empty());
+
+        // Clear on empty treap
+        treap.clear();
+        assert!(treap.is_empty());
+
+        // Insert then clear
+        treap.insert(1, &mut rng);
+        treap.insert(2, &mut rng);
+        assert_eq!(treap.len(), 2);
+        treap.clear();
+        assert!(treap.is_empty());
+        assert!(!treap.contains(&1));
+        assert!(!treap.contains(&2));
+    }
+
+    #[test]
+    fn test_single_element() {
+        let mut treap = Treap::new();
+        let mut rng = StdRng::seed_from_u64(111);
+
+        // Single element operations
+        treap.insert(42, &mut rng);
+        assert_eq!(treap.len(), 1);
+        assert!(treap.contains(&42));
+        assert!(!treap.contains(&0));
+
+        // Duplicate of single element
+        assert!(!treap.insert(42, &mut rng));
+        assert_eq!(treap.len(), 1);
+
+        // Remove single element
+        assert!(treap.remove(&42));
+        assert!(treap.is_empty());
+        assert!(!treap.contains(&42));
+
+        // Re-insert
+        treap.insert(42, &mut rng);
+        assert_eq!(treap.len(), 1);
+
+        // Retain that keeps the element
+        treap.retain(|&x| x == 42);
+        assert_eq!(treap.len(), 1);
+
+        // Retain that removes the element
+        treap.retain(|&x| x != 42);
+        assert!(treap.is_empty());
     }
 }
