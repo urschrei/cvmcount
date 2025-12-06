@@ -83,10 +83,16 @@ impl<T: Ord> Treap<T> {
     }
 
     /// Insert a key with a random priority
-    pub fn insert<R: Rng>(&mut self, key: T, rng: &mut R) {
+    ///
+    /// Returns `true` if the key was inserted, `false` if it already existed.
+    pub fn insert<R: Rng>(&mut self, key: T, rng: &mut R) -> bool {
         let priority = rng.random();
-        self.root = Self::insert_node(self.root.take(), key, priority);
-        self.size += 1;
+        let (new_root, inserted) = Self::insert_node(self.root.take(), key, priority);
+        self.root = new_root;
+        if inserted {
+            self.size += 1;
+        }
+        inserted
     }
 
     /// Check if the treap contains a key
@@ -122,32 +128,39 @@ impl<T: Ord> Treap<T> {
     }
 
     // Helper function to insert a node
-    fn insert_node(node: Option<Box<Node<T>>>, key: T, priority: u32) -> Option<Box<Node<T>>> {
+    // Returns (new_tree, was_inserted) tuple
+    fn insert_node(
+        node: Option<Box<Node<T>>>,
+        key: T,
+        priority: u32,
+    ) -> (Option<Box<Node<T>>>, bool) {
         match node {
-            None => Some(Box::new(Node::new(key, priority))),
-            Some(mut n) => {
-                match key.cmp(&n.key) {
-                    Ordering::Less => {
-                        n.left = Self::insert_node(n.left, key, priority);
-                        // Maintain heap property
-                        if n.left.as_ref().unwrap().priority > n.priority {
-                            Self::rotate_right(n)
-                        } else {
-                            Some(n)
-                        }
-                    }
-                    Ordering::Greater => {
-                        n.right = Self::insert_node(n.right, key, priority);
-                        // Maintain heap property
-                        if n.right.as_ref().unwrap().priority > n.priority {
-                            Self::rotate_left(n)
-                        } else {
-                            Some(n)
-                        }
-                    }
-                    Ordering::Equal => Some(n), // Key already exists, do nothing
+            None => (Some(Box::new(Node::new(key, priority))), true),
+            Some(mut n) => match key.cmp(&n.key) {
+                Ordering::Less => {
+                    let (new_left, inserted) = Self::insert_node(n.left, key, priority);
+                    n.left = new_left;
+                    // Maintain heap property (only rotate if we actually inserted)
+                    let result = if inserted && n.left.as_ref().unwrap().priority > n.priority {
+                        Self::rotate_right(n)
+                    } else {
+                        Some(n)
+                    };
+                    (result, inserted)
                 }
-            }
+                Ordering::Greater => {
+                    let (new_right, inserted) = Self::insert_node(n.right, key, priority);
+                    n.right = new_right;
+                    // Maintain heap property (only rotate if we actually inserted)
+                    let result = if inserted && n.right.as_ref().unwrap().priority > n.priority {
+                        Self::rotate_left(n)
+                    } else {
+                        Some(n)
+                    };
+                    (result, inserted)
+                }
+                Ordering::Equal => (Some(n), false), // Key already exists, do nothing
+            },
         }
     }
 
@@ -309,5 +322,34 @@ mod tests {
                 assert!(!treap.contains(&i));
             }
         }
+    }
+
+    #[test]
+    fn test_duplicate_insertion() {
+        let mut treap = Treap::new();
+        let mut rng = StdRng::seed_from_u64(42);
+
+        // Insert elements
+        assert!(treap.insert(5, &mut rng)); // First insertion returns true
+        assert!(treap.insert(3, &mut rng));
+        assert!(treap.insert(7, &mut rng));
+        assert_eq!(treap.len(), 3);
+
+        // Try to insert duplicates - should return false and not change size
+        assert!(!treap.insert(5, &mut rng));
+        assert!(!treap.insert(3, &mut rng));
+        assert!(!treap.insert(7, &mut rng));
+        assert_eq!(treap.len(), 3); // Size unchanged
+
+        // Verify elements still exist
+        assert!(treap.contains(&5));
+        assert!(treap.contains(&3));
+        assert!(treap.contains(&7));
+
+        // Remove and re-insert should work
+        assert!(treap.remove(&5));
+        assert_eq!(treap.len(), 2);
+        assert!(treap.insert(5, &mut rng)); // Re-insertion returns true
+        assert_eq!(treap.len(), 3);
     }
 }
