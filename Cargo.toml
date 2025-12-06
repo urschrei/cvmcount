@@ -9,7 +9,7 @@ keywords = ["CVM", "count-distinct", "estimation", "treap"]
 categories = ["algorithms", ]
 rust-version = "1.85"
 
-version = "1.0.0"
+version = "1.0.1"
 edition = "2024"
 
 [dependencies]
@@ -19,7 +19,7 @@ clap = { version = "4.5.4", features = ["cargo"] }
 rustc-hash = "2.1.1"
 
 [dev-dependencies]
-criterion = "0.7.0"
+criterion = "0.8.0"
 
 [lib]
 name = "cvmcount"
