@@ -13,7 +13,7 @@ version = "1.0.1"
 edition = "2024"
 
 [dependencies]
-rand = { version = "0.9.1", features = ["std_rng"] }
+rand = { version = "0.10.0", features = ["std_rng"] }
 regex = "1.10.4"
 clap = { version = "4.5.4", features = ["cargo"] }
 rustc-hash = "2.1.1"
