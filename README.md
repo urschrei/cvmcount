@@ -40,7 +40,9 @@ cvmcount -t file.txt -e 0.8 -d 0.1 -s 5000
 
 `-e --epsilon`: how close you want your estimate to be to the true number of distinct tokens. A smaller ε means you require a more precise estimate. For example, ε = 0.05 means you want your estimate to be within 5 % of the actual value. An epsilon of 0.8 is a good starting point for most applications.
 
-`-d --delta`: the level of certainty that the algorithm's estimate will fall within your desired accuracy range. A higher confidence (e.g. 99.9 %) means you're very sure the estimate will be accurate, while a lower confidence (e.g. 90 %) means there's a higher chance the estimate may be outside your desired range. A delta of 0.1 is a good starting point for most applications.
+`-d --delta`: the probability that the algorithm's estimate will fall *outside* your desired accuracy range. Your confidence in the estimate is 1 − δ: a delta of 0.001 means you're 99.9 % sure the estimate will be accurate, while a delta of 0.1 (90 % confidence) means there's a higher chance the estimate may be outside your desired range. A delta of 0.1 is a good starting point for most applications.
+
+Epsilon and delta must both lie strictly between 0 and 1, and the stream size must be at least 1; `cvmcount` exits with an error otherwise.
 
 `-s --streamsize`: this is used to determine buffer size and can be a loose approximation. The closer it is to the stream size, the more accurate the results.
 
