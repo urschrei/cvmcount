@@ -58,7 +58,7 @@ fn bench_count_strings_integers(c: &mut Criterion) {
         },
     );
     c.bench_function(
-        "Count uniques in ten million 7-digit random positive integers: e = 0.8, d = 0.1, s = 1000",
+        "Count uniques in one million 7-digit random positive integers: e = 0.8, d = 0.1, s = 1000",
         |b| {
             let epsilon = 0.8;
             let delta = 0.1;
@@ -74,7 +74,7 @@ fn bench_count_strings_integers(c: &mut Criterion) {
         },
     );
     c.bench_function(
-        "Count uniques in ten million 7-digit random positive integers: HashSet",
+        "Count uniques in one million 7-digit random positive integers: HashSet",
         |b| {
             let digits = generate_random_numbers();
             b.iter(|| {
