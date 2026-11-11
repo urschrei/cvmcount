@@ -1,7 +1,12 @@
 //! An implementation of the CVM fast element counting algorithm presented in
 //! Chakraborty, S., Vinodchandran, N. V., & Meel, K. S. (2022). *Distinct Elements in Streams: An Algorithm for the (Text) Book*. 6 pages, 727571 bytes. <https://doi.org/10.4230/LIPIcs.ESA.2022.34>
 //!
-//! This implementation uses a treap data structure as the buffer, following Knuth's original design.
+//! It includes the amendment from Knuth, *The CVM Algorithm for Estimating Distinct Elements in
+//! Streams* (2023), <https://cs.stanford.edu/~knuth/papers/cvm-note.pdf>: when the buffer is full,
+//! the halving step repeats until the buffer has room, and the algorithm never reports failure.
+//! With this amendment, the estimate is unbiased.
+//!
+//! The buffer is a treap, which this implementation uses as an ordered set of elements.
 
 mod treap;
 
@@ -251,8 +256,10 @@ impl<T: Ord> CVM<T> {
         // The algorithm works as follows:
         // 1. If element exists in buffer, remove it (this ensures proper sampling)
         // 2. Add element back with current probability
-        // 3. If buffer is full, remove ~half the elements and halve the probability
-        // This creates a geometric sampling scheme that provides an unbiased estimate
+        // 3. While the buffer is full, remove each element with probability 1/2 and halve the
+        //    probability. The paper uses "if" here and reports failure if the buffer is still
+        //    full; that version is biased. Knuth's "while" version is unbiased (see the crate
+        //    documentation).
         //
         // Steps 1 and 2 together leave the element in the buffer if and only if
         // a coin with heads probability `p` comes up heads, so flip the coin
