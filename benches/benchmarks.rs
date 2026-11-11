@@ -8,7 +8,7 @@ use std::{
 
 use criterion::Criterion;
 use cvmcount::CVM;
-use rand::{Rng, rng};
+use rand::{RngExt, rng};
 use regex::Regex;
 
 use std::collections::HashSet;

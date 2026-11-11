@@ -6,9 +6,9 @@
 mod treap;
 
 use crate::treap::Treap;
-use rand::Rng;
+use rand::RngExt;
 use rand::SeedableRng;
-use rand::rngs::StdRng;
+use rand::rngs::{StdRng, SysRng};
 
 /// Specification for confidence level in the CVM algorithm
 #[derive(Debug, Clone, Copy)]
@@ -228,7 +228,7 @@ impl<T: Ord> CVM<T> {
             buf_size: bufsize,
             buf: Treap::new(),
             probability: 1.0,
-            rng: StdRng::from_os_rng(),
+            rng: StdRng::try_from_rng(&mut SysRng).expect("failed to obtain entropy from the OS"),
         }
     }
     /// Add an element, potentially updating the unique element count

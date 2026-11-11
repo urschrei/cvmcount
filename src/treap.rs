@@ -27,7 +27,7 @@
 //! - Efficient `retain`: Optimized for the "clear about half" operation
 //! - RNG integration: Accepts an external RNG for consistent randomness
 
-use rand::Rng;
+use rand::{Rng, RngExt};
 use std::cmp::Ordering;
 
 /// A node in the treap
