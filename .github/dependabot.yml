@@ -14,3 +14,20 @@ updates:
         applies-to: security-updates
         patterns:
           - "*"
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # dist generates release.yml and rejects hand edits to it. Update its
+    # actions by upgrading dist and running `dist init` instead.
+    exclude-paths:
+      - ".github/workflows/release.yml"
+    groups:
+      github-actions:
+        applies-to: version-updates
+        patterns:
+          - "*"
+      github-actions-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
