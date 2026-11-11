@@ -16,85 +16,19 @@ use std::collections::{BTreeSet, HashMap};
 use std::fmt::Debug;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
-type Link<T> = Option<Box<Node<T>>>;
-
-/// In-order keys, iteratively (so that degenerate trees don't overflow the stack).
-fn inorder<T: Clone>(root: &Link<T>) -> Vec<T> {
-    let mut out = Vec::new();
-    let mut stack: Vec<&Node<T>> = Vec::new();
-    let mut cur = root.as_deref();
-    loop {
-        while let Some(n) = cur {
-            stack.push(n);
-            cur = n.left.as_deref();
-        }
-        match stack.pop() {
-            None => return out,
-            Some(n) => {
-                out.push(n.key.clone());
-                cur = n.right.as_deref();
-            }
-        }
-    }
-}
-
-/// Every parent's priority is >= its children's.
-fn heap_ok<T>(root: &Link<T>) -> bool {
-    let mut stack: Vec<&Node<T>> = root.as_deref().into_iter().collect();
-    while let Some(n) = stack.pop() {
-        for child in [n.left.as_deref(), n.right.as_deref()]
-            .into_iter()
-            .flatten()
-        {
-            if child.priority > n.priority {
-                return false;
-            }
-            stack.push(child);
-        }
-    }
-    true
-}
-
-/// Height of the tree (number of nodes on the longest root-to-leaf path).
-fn height<T>(root: &Link<T>) -> usize {
-    let mut max = 0;
-    let mut stack: Vec<(&Node<T>, usize)> = root.as_deref().map(|n| (n, 1)).into_iter().collect();
-    while let Some((n, d)) = stack.pop() {
-        max = max.max(d);
-        for child in [n.left.as_deref(), n.right.as_deref()]
-            .into_iter()
-            .flatten()
-        {
-            stack.push((child, d + 1));
-        }
-    }
-    max
-}
-
-/// Snapshot of the full tree: (key, priority) in pre-order, with shape markers.
-fn shape<T: Clone>(root: &Link<T>) -> Vec<Option<(T, u32)>> {
-    let mut out = Vec::new();
-    let mut stack: Vec<Option<&Node<T>>> = vec![root.as_deref()];
-    while let Some(n) = stack.pop() {
-        match n {
-            None => out.push(None),
-            Some(n) => {
-                out.push(Some((n.key.clone(), n.priority)));
-                stack.push(n.right.as_deref());
-                stack.push(n.left.as_deref());
-            }
-        }
-    }
-    out
+/// In-order keys, cloned.
+fn inorder<T: Clone>(treap: &Treap<T>) -> Vec<T> {
+    treap.keys().into_iter().cloned().collect()
 }
 
 /// The treap's full observable state agrees with the model: BST order and
-/// contents, heap order, and the cached size.
+/// contents, heap order, the cached size, and the arena's bookkeeping.
 fn assert_matches_model<T: Ord + Clone + Debug>(treap: &Treap<T>, model: &BTreeSet<T>) {
-    let keys = inorder(&treap.root);
+    let keys = inorder(treap);
     let expected: Vec<T> = model.iter().cloned().collect();
     assert_eq!(keys, expected, "in-order keys differ from model");
-    assert!(heap_ok(&treap.root), "heap property violated");
+    assert!(treap.heap_ok(), "heap property violated");
+    assert!(treap.arena_ok(), "arena slots are inconsistent");
     assert_eq!(treap.len(), model.len(), "len() differs from model");
     assert_eq!(treap.is_empty(), model.is_empty());
 }
@@ -346,7 +280,7 @@ fn insert_keeps_first_of_equal_keys(tc: TestCase) {
         assert_eq!(inserted, !first_tag.contains_key(&key));
         first_tag.entry(key).or_insert(tag);
     }
-    for t in inorder(&treap.root) {
+    for t in inorder(&treap) {
         assert_eq!(t.tag, first_tag[&t.key], "key {} was replaced", t.key);
     }
 }
@@ -367,10 +301,19 @@ fn retain_all_is_identity(tc: TestCase) {
     let keys: Vec<i32> = tc.draw(gs::vecs(keys()));
     let mut rng = tc.draw(randoms());
     let mut treap = build(&keys, &mut rng);
-    let before = shape(&treap.root);
+    let before: Vec<Option<(i32, u32)>> = treap
+        .shape()
+        .into_iter()
+        .map(|o| o.map(|(k, p)| (*k, p)))
+        .collect();
     let len = treap.len();
     treap.retain(|_| true);
-    assert_eq!(shape(&treap.root), before);
+    let after: Vec<Option<(i32, u32)>> = treap
+        .shape()
+        .into_iter()
+        .map(|o| o.map(|(k, p)| (*k, p)))
+        .collect();
+    assert_eq!(after, before);
     assert_eq!(treap.len(), len);
 }
 
@@ -382,7 +325,8 @@ fn retain_none_empties(tc: TestCase) {
     let mut treap = build(&keys, &mut rng);
     treap.retain(|_| false);
     assert!(treap.is_empty());
-    assert!(treap.root.is_none());
+    assert!(treap.keys().is_empty());
+    assert!(treap.arena_ok());
 }
 
 /// Removing a present key and re-inserting it restores membership and size,
@@ -392,13 +336,13 @@ fn remove_insert_roundtrip(tc: TestCase) {
     let keys: Vec<i32> = tc.draw(gs::vecs(keys()).min_size(1));
     let mut rng = tc.draw(randoms());
     let mut treap = build(&keys, &mut rng);
-    let before = inorder(&treap.root);
+    let before = inorder(&treap);
     let k = tc.draw(gs::sampled_from(keys));
     assert!(treap.remove(&k));
     assert!(!treap.contains(&k));
     assert_eq!(treap.len(), before.len() - 1);
     assert!(treap.insert(k, &mut rng));
-    assert_eq!(inorder(&treap.root), before);
+    assert_eq!(inorder(&treap), before);
     assert_eq!(treap.len(), before.len());
 }
 
@@ -439,8 +383,7 @@ enum PanickingOp {
 /// If a user callback panics part-way through an operation (`Ord::cmp` in
 /// `insert`/`remove`/`contains`, or the predicate in `retain`), the treap is
 /// left a valid treap whose `len()` counts the elements it actually holds.
-/// A panicking `insert`/`remove`/`contains` leaves the contents unchanged; a
-/// panicking `retain` keeps every element it had not yet rejected. (If the
+/// Any of these operations that panics leaves the contents unchanged. (If the
 /// fuse outlasts the operation, it must simply have its normal effect.)
 #[hegel::test(test_cases = 3000)]
 fn consistent_after_panicking_callback(tc: TestCase) {
@@ -490,7 +433,7 @@ fn consistent_after_panicking_callback(tc: TestCase) {
         }
     }));
     FUSE.with(|f| f.set(usize::MAX));
-    let mut expected: BTreeSet<i32> = before.difference(&rejected).copied().collect();
+    let mut expected = before.clone();
     if result.is_ok() {
         match op {
             PanickingOp::Insert(k) => {
@@ -499,14 +442,16 @@ fn consistent_after_panicking_callback(tc: TestCase) {
             PanickingOp::Remove(k) => {
                 expected.remove(&k);
             }
-            PanickingOp::Contains(_) | PanickingOp::Retain => {}
+            PanickingOp::Retain => expected.retain(|k| !rejected.contains(k)),
+            PanickingOp::Contains(_) => {}
         }
     } else {
         tc.event("panicked");
     }
-    let actual: Vec<i32> = inorder(&treap.root).into_iter().map(|k| k.0).collect();
+    let actual: Vec<i32> = inorder(&treap).into_iter().map(|k| k.0).collect();
     assert_eq!(actual, expected.iter().copied().collect::<Vec<_>>());
-    assert!(heap_ok(&treap.root), "heap property violated");
+    assert!(treap.heap_ok(), "heap property violated");
+    assert!(treap.arena_ok(), "arena slots are inconsistent");
     assert_eq!(treap.len(), expected.len(), "len() is stale after a panic");
 }
 
@@ -523,11 +468,11 @@ fn scale_probe() {
         assert!(treap.insert(k, &mut rng));
     }
     assert_eq!(treap.len(), N as usize);
-    assert!(heap_ok(&treap.root));
+    assert!(treap.heap_ok());
     // A random treap's expected height is ~2.99 log2(n) (Devroye 1986, for
     // random BSTs); 4 log2(n) catches a rotation or priority mistake that
     // leaves the tree correct but unbalanced.
-    let h = height(&treap.root);
+    let h = treap.height();
     assert!(
         h <= 4 * (N as f64).log2().ceil() as usize,
         "height {h} is unbalanced"
@@ -542,7 +487,7 @@ fn scale_probe() {
         keep
     });
     assert_eq!(treap.len(), kept);
-    assert_eq!(inorder(&treap.root), (0..N).step_by(2).collect::<Vec<_>>());
+    assert_eq!(inorder(&treap), (0..N).step_by(2).collect::<Vec<_>>());
     for k in (0..N).step_by(2) {
         assert!(treap.remove(&k));
     }
@@ -550,5 +495,29 @@ fn scale_probe() {
     for k in (0..N).rev() {
         treap.insert(k, &mut rng);
     }
+    drop(treap);
+}
+
+/// Scale probe for degenerate priorities: ascending keys with ascending
+/// priorities rotate every new node to the root, building a left path of
+/// height N. No operation (or drop) may recurse per level, so none of them
+/// may overflow the stack.
+#[test]
+fn scale_probe_degenerate_path() {
+    const N: i32 = 200_000;
+    let mut rng = PatternRng { next: 0, step: 1 };
+    let mut treap = Treap::new();
+    for k in 0..N {
+        assert!(treap.insert(k, &mut rng));
+    }
+    assert_eq!(treap.height(), N as usize);
+    assert!(treap.contains(&0));
+    assert!(!treap.contains(&-1));
+    assert!(treap.remove(&0));
+    assert!(treap.insert(0, &mut PatternRng { next: 0, step: 0 }));
+    treap.retain(|&k| k % 2 == 0);
+    assert_eq!(treap.len(), (N / 2) as usize);
+    assert!(treap.heap_ok());
+    assert!(treap.arena_ok());
     drop(treap);
 }
