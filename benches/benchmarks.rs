@@ -74,6 +74,24 @@ fn bench_count_strings_integers(c: &mut Criterion) {
         },
     );
     c.bench_function(
+        "Count uniques in one million 7-digit random positive integers, large buffer: e = 0.05, d = 0.01, s = 1_000_000",
+        |b| {
+            // buf_size is ~142k here, so the treap stays large and every
+            // element pays for a deep descent.
+            let epsilon = 0.05;
+            let delta = 0.01;
+            let stream_size = 1_000_000;
+            let digits = generate_random_numbers();
+            b.iter(|| {
+                let mut int_counter: CVM<i32> = CVM::new(epsilon, delta, stream_size);
+                digits
+                    .iter()
+                    .for_each(|integer| int_counter.process_element(*integer));
+                int_counter.calculate_final_result()
+            })
+        },
+    );
+    c.bench_function(
         "Count uniques in ten million 7-digit random positive integers: HashSet",
         |b| {
             let digits = generate_random_numbers();
