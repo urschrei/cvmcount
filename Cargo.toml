@@ -8,6 +8,8 @@ documentation = "https://docs.rs/cvmcount"
 keywords = ["CVM", "count-distinct", "estimation", "treap"]
 categories = ["algorithms", ]
 rust-version = "1.85"
+# Tests and the accuracy example read benches/kiy.txt, so it stays in the package.
+exclude = [".github/", "analysis/", "cvmcount.png", "dist-workspace.toml"]
 
 version = "1.1.1"
 edition = "2024"

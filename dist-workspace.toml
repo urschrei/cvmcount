@@ -17,3 +17,8 @@ pr-run-mode = "plan"
 install-updater = false
 # Path that installers should place binaries in
 install-path = "CARGO_HOME"
+# Publish jobs to run in CI
+publish-jobs = ["./publish-crates"]
+# A called workflow cannot have more permissions than its caller grants.
+# publish-crates checks out the repository and requests an OIDC token.
+github-custom-job-permissions = { "publish-crates" = { contents = "read", id-token = "write" } }
