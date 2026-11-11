@@ -1,0 +1,32 @@
+# Publish the crate to crates.io with trusted publishing.
+#
+# dist calls this workflow from release.yml (see `publish-jobs` in
+# dist-workspace.toml). crates.io identifies the caller from the OIDC token,
+# so the trusted publisher on crates.io names the workflow `release.yml`.
+name: Publish to crates.io
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Get a crates.io token
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+      - name: Publish
+        run: cargo publish --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
