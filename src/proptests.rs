@@ -373,9 +373,10 @@ fn calculate_final_result_is_pure(tc: TestCase) {
 
 // ----- Accuracy -----------------------------------------------------------
 
-/// The (ε, δ) guarantee (Chakraborty, Vinodchandran & Meel 2022, Thm. 1):
-/// the estimate is within a factor (1 ± ε) of the true count with
-/// probability at least 1 - δ. Over 200 fixed seeds the number of misses
+/// The (ε, δ) guarantee, the main theorem of Chakraborty, Vinodchandran &
+/// Meel (ESA 2022; see arXiv:2301.10191 v2 for a corrected proof): the
+/// estimate is within a factor (1 ± ε) of the true count with probability
+/// at least 1 - δ. Over 200 fixed seeds the number of misses
 /// must stay within the δ budget (expected count 10 at δ = 0.05; the bound
 /// is loose, so in practice there are far fewer).
 #[test]
