@@ -10,6 +10,13 @@ use rand::RngExt;
 use rand::SeedableRng;
 use rand::rngs::{StdRng, SysRng};
 
+/// Whether `x` lies in the open interval (0, 1). False for NaN, which every
+/// comparison rejects; writing the check as `x <= 0.0 || x >= 1.0` instead
+/// would let NaN through.
+fn in_open_unit_interval(x: f64) -> bool {
+    x > 0.0 && x < 1.0
+}
+
 /// Specification for confidence level in the CVM algorithm
 #[derive(Debug, Clone, Copy)]
 pub enum ConfidenceSpec {
@@ -32,17 +39,17 @@ impl ConfidenceSpec {
     fn validate(self) -> Result<Self, String> {
         match self {
             ConfidenceSpec::Delta(delta) => {
-                if delta <= 0.0 || delta >= 1.0 {
-                    Err("Delta must be between 0.0 and 1.0 (exclusive)".to_string())
-                } else {
+                if in_open_unit_interval(delta) {
                     Ok(self)
+                } else {
+                    Err("Delta must be between 0.0 and 1.0 (exclusive)".to_string())
                 }
             }
             ConfidenceSpec::Confidence(confidence) => {
-                if confidence <= 0.0 || confidence >= 1.0 {
-                    Err("Confidence must be between 0.0 and 1.0 (exclusive)".to_string())
-                } else {
+                if in_open_unit_interval(confidence) {
                     Ok(self)
+                } else {
+                    Err("Confidence must be between 0.0 and 1.0 (exclusive)".to_string())
                 }
             }
         }
@@ -147,7 +154,7 @@ impl CVMBuilder {
     pub fn build<T: Ord>(self) -> Result<CVM<T>, String> {
         // Validate and get epsilon
         let epsilon = self.epsilon.unwrap_or(0.8);
-        if epsilon <= 0.0 || epsilon >= 1.0 {
+        if !in_open_unit_interval(epsilon) {
             return Err("Epsilon must be between 0.0 and 1.0 (exclusive)".to_string());
         }
 
