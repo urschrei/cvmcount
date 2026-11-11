@@ -26,27 +26,43 @@
 //! - Simplified API: Only operations needed for CVM are implemented
 //! - Efficient `retain`: Optimized for the "clear about half" operation
 //! - RNG integration: Accepts an external RNG for consistent randomness
+//!
+//! ## Layout
+//!
+//! Nodes live in a single `Vec` arena and refer to their children by `u32`
+//! index rather than through `Box` pointers. For small keys this halves the
+//! per-node footprint (an `i32` node is 16 bytes, against a 32-byte heap
+//! allocation per boxed node), so more of the tree stays in cache, and
+//! inserting no longer allocates once the arena has grown. Slots freed by
+//! `remove` are reused by later inserts; `retain` compacts the arena.
+//!
+//! Every operation is iterative, so tree height (which is O(log n) only in
+//! expectation) never translates into recursion depth.
 
 use rand::{Rng, RngExt};
 use std::cmp::Ordering;
+
+/// Index of a node in the arena; `NIL` marks an empty subtree.
+type Idx = u32;
+const NIL: Idx = Idx::MAX;
+const LEFT: usize = 0;
+const RIGHT: usize = 1;
 
 /// A node in the treap
 struct Node<T> {
     key: T,
     priority: u32,
-    left: Option<Box<Node<T>>>,
-    right: Option<Box<Node<T>>>,
+    /// Children, indexed by `LEFT` and `RIGHT`. An array (rather than two
+    /// fields) lets a search pick the next node without a branch.
+    child: [Idx; 2],
 }
 
-impl<T> Node<T> {
-    fn new(key: T, priority: u32) -> Self {
-        Node {
-            key,
-            priority,
-            left: None,
-            right: None,
-        }
-    }
+/// A position that holds a subtree: the root, or a child field of a node.
+#[derive(Clone, Copy)]
+enum Link {
+    Root,
+    Left(Idx),
+    Right(Idx),
 }
 
 /// A treap data structure
@@ -58,16 +74,96 @@ impl<T> Node<T> {
 /// 4. No split operation as it's not needed for CVM
 /// 5. Insert doesn't update existing keys - matching CVM's requirement
 pub struct Treap<T> {
-    root: Option<Box<Node<T>>>,
+    /// Node arena. Slots listed in `free` are dead: unreachable from `root`,
+    /// awaiting reuse. Their keys are dropped when the slot is reused, or when
+    /// `retain` or `clear` compacts the arena.
+    nodes: Vec<Node<T>>,
+    free: Vec<Idx>,
+    root: Idx,
     size: usize,
+    /// Scratch space for `insert`'s search path, kept to avoid reallocating.
+    path: Vec<(Idx, bool)>,
+}
+
+impl<T> Treap<T> {
+    fn node(&self, i: Idx) -> &Node<T> {
+        &self.nodes[i as usize]
+    }
+
+    fn node_mut(&mut self, i: Idx) -> &mut Node<T> {
+        &mut self.nodes[i as usize]
+    }
+
+    fn set(&mut self, link: Link, child: Idx) {
+        match link {
+            Link::Root => self.root = child,
+            Link::Left(p) => self.node_mut(p).child[LEFT] = child,
+            Link::Right(p) => self.node_mut(p).child[RIGHT] = child,
+        }
+    }
+
+    /// Store a new, unlinked node, reusing a dead slot if there is one.
+    fn alloc(&mut self, key: T, priority: u32) -> Idx {
+        let node = Node {
+            key,
+            priority,
+            child: [NIL, NIL],
+        };
+        if let Some(i) = self.free.pop() {
+            *self.node_mut(i) = node;
+            i
+        } else {
+            let i = Idx::try_from(self.nodes.len())
+                .ok()
+                .filter(|&i| i != NIL)
+                .expect("treap capacity exceeded");
+            self.nodes.push(node);
+            i
+        }
+    }
+
+    /// Merge two treaps, where every key in `left` is less than every key in
+    /// `right`, returning the root of the result. Compares priorities only.
+    fn merge(&mut self, mut left: Idx, mut right: Idx) -> Idx {
+        let mut root = NIL;
+        // Where the next piece of the result goes; `None` means `root`.
+        let mut hole: Option<Link> = None;
+        loop {
+            let piece = if left == NIL || right == NIL {
+                if left == NIL { right } else { left }
+            } else if self.node(left).priority > self.node(right).priority {
+                left
+            } else {
+                right
+            };
+            match hole {
+                None => root = piece,
+                Some(link) => self.set(link, piece),
+            }
+            if left == NIL || right == NIL {
+                return root;
+            }
+            // The higher-priority root stays on top; merge the rest beneath it.
+            if piece == left {
+                hole = Some(Link::Right(left));
+                left = self.node(left).child[RIGHT];
+            } else {
+                hole = Some(Link::Left(right));
+                right = self.node(right).child[LEFT];
+            }
+        }
+    }
 }
 
 impl<T: Ord> Treap<T> {
     /// Create a new empty treap
     pub fn new() -> Self {
         Treap {
-            root: None,
+            nodes: Vec::new(),
+            free: Vec::new(),
+            root: NIL,
             size: 0,
+            path: Vec::new(),
         }
     }
 
@@ -89,38 +185,99 @@ impl<T: Ord> Treap<T> {
     /// drawn from `rng` in either case.
     pub fn insert<R: Rng>(&mut self, key: T, rng: &mut R) -> bool {
         let priority = rng.random();
-        let inserted = Self::insert_at(&mut self.root, key, priority);
-        if inserted {
-            self.size += 1;
+        // Search, recording the path. All comparisons happen here, before any
+        // mutation, so a panicking `Ord` leaves the treap untouched.
+        self.path.clear();
+        let mut i = self.root;
+        while i != NIL {
+            let n = &self.nodes[i as usize];
+            let went_left = match key.cmp(&n.key) {
+                Ordering::Less => true,
+                Ordering::Greater => false,
+                Ordering::Equal => return false,
+            };
+            self.path.push((i, went_left));
+            i = if went_left {
+                n.child[LEFT]
+            } else {
+                n.child[RIGHT]
+            };
         }
-        inserted
+        // Attach as a leaf, then rotate up while it outranks its parent.
+        let x = self.alloc(key, priority);
+        let mut link = match self.path.last() {
+            None => Link::Root,
+            Some(&(p, true)) => Link::Left(p),
+            Some(&(p, false)) => Link::Right(p),
+        };
+        self.set(link, x);
+        while let Some((p, went_left)) = self.path.pop() {
+            if self.node(x).priority <= self.node(p).priority {
+                break;
+            }
+            if went_left {
+                let moved = self.node(x).child[RIGHT];
+                self.node_mut(p).child[LEFT] = moved;
+                self.node_mut(x).child[RIGHT] = p;
+            } else {
+                let moved = self.node(x).child[LEFT];
+                self.node_mut(p).child[RIGHT] = moved;
+                self.node_mut(x).child[LEFT] = p;
+            }
+            link = match self.path.last() {
+                None => Link::Root,
+                Some(&(g, true)) => Link::Left(g),
+                Some(&(g, false)) => Link::Right(g),
+            };
+            self.set(link, x);
+        }
+        self.size += 1;
+        true
     }
 
     /// Check if the treap contains a key
     pub fn contains(&self, key: &T) -> bool {
-        Self::contains_node(&self.root, key)
+        let mut i = self.root;
+        while i != NIL {
+            let n = self.node(i);
+            let ord = key.cmp(&n.key);
+            if ord == Ordering::Equal {
+                return true;
+            }
+            i = n.child[usize::from(ord == Ordering::Greater)];
+        }
+        false
     }
 
     /// Remove a key from the treap
     ///
     /// Returns `true` if the key was present.
     pub fn remove(&mut self, key: &T) -> bool {
-        // Find the link holding the key. All comparisons happen before any
-        // mutation, so a panicking `Ord` leaves the treap untouched.
-        let mut link = &mut self.root;
+        // All comparisons happen before any mutation, so a panicking `Ord`
+        // leaves the treap untouched.
+        let mut link = Link::Root;
+        let mut i = self.root;
         loop {
-            let ord = match link.as_deref() {
-                None => return false,
-                Some(n) => key.cmp(&n.key),
-            };
-            link = match ord {
+            if i == NIL {
+                return false;
+            }
+            let n = self.node(i);
+            match key.cmp(&n.key) {
+                Ordering::Less => {
+                    link = Link::Left(i);
+                    i = n.child[LEFT];
+                }
+                Ordering::Greater => {
+                    link = Link::Right(i);
+                    i = n.child[RIGHT];
+                }
                 Ordering::Equal => break,
-                Ordering::Less => &mut link.as_mut().expect("link is non-empty").left,
-                Ordering::Greater => &mut link.as_mut().expect("link is non-empty").right,
-            };
+            }
         }
-        let node = link.take().expect("link holds the key");
-        *link = Self::merge(node.left, node.right);
+        let (left, right) = (self.node(i).child[LEFT], self.node(i).child[RIGHT]);
+        let merged = self.merge(left, right);
+        self.set(link, merged);
+        self.free.push(i);
         self.size -= 1;
         true
     }
@@ -128,7 +285,9 @@ impl<T: Ord> Treap<T> {
     /// Clear the treap
     #[allow(dead_code)]
     pub fn clear(&mut self) {
-        self.root = None;
+        self.nodes.clear();
+        self.free.clear();
+        self.root = NIL;
         self.size = 0;
     }
 
@@ -136,130 +295,98 @@ impl<T: Ord> Treap<T> {
     ///
     /// The predicate is called exactly once per element, in post-order (left
     /// subtree, right subtree, node), not in key order. If it panics, the
-    /// treap keeps every element it had not yet rejected and remains valid.
+    /// treap is left unchanged.
     pub fn retain<F>(&mut self, mut f: F)
     where
         F: FnMut(&T) -> bool,
     {
-        /// Keeps `size` in step with the tree even if the predicate panics.
-        struct SizeGuard<'a> {
-            size: &'a mut usize,
-            removed: usize,
+        // Phase 1: ask the predicate about every element, mutating nothing.
+        let mut keep = vec![false; self.nodes.len()];
+        let mut kept = 0;
+        let mut stack: Vec<(Idx, bool)> = Vec::new();
+        if self.root != NIL {
+            stack.push((self.root, false));
         }
-        impl Drop for SizeGuard<'_> {
-            fn drop(&mut self) {
-                *self.size -= self.removed;
-            }
-        }
-        let mut guard = SizeGuard {
-            size: &mut self.size,
-            removed: 0,
-        };
-        Self::retain_at(&mut self.root, &mut f, &mut guard.removed);
-    }
-
-    // Insert below `link`, rotating the new node up to restore heap order.
-    // Comparisons happen on the way down, before any mutation, so a panicking
-    // `Ord` leaves the treap untouched. Returns whether the key was inserted.
-    fn insert_at(link: &mut Option<Box<Node<T>>>, key: T, priority: u32) -> bool {
-        let Some(node) = link else {
-            *link = Some(Box::new(Node::new(key, priority)));
-            return true;
-        };
-        match key.cmp(&node.key) {
-            Ordering::Less => {
-                if !Self::insert_at(&mut node.left, key, priority) {
-                    return false;
-                }
-                if node
-                    .left
-                    .as_ref()
-                    .is_some_and(|l| l.priority > node.priority)
-                {
-                    Self::rotate_right(link);
-                }
-                true
-            }
-            Ordering::Greater => {
-                if !Self::insert_at(&mut node.right, key, priority) {
-                    return false;
-                }
-                if node
-                    .right
-                    .as_ref()
-                    .is_some_and(|r| r.priority > node.priority)
-                {
-                    Self::rotate_left(link);
-                }
-                true
-            }
-            Ordering::Equal => false, // Key already exists, do nothing
-        }
-    }
-
-    // Helper function to check if a node contains a key
-    fn contains_node(node: &Option<Box<Node<T>>>, key: &T) -> bool {
-        match node {
-            None => false,
-            Some(n) => match key.cmp(&n.key) {
-                Ordering::Less => Self::contains_node(&n.left, key),
-                Ordering::Greater => Self::contains_node(&n.right, key),
-                Ordering::Equal => true,
-            },
-        }
-    }
-
-    // Merge two subtrees, where every key in `left` is less than every key in `right`
-    fn merge(left: Option<Box<Node<T>>>, right: Option<Box<Node<T>>>) -> Option<Box<Node<T>>> {
-        match (left, right) {
-            (None, right) => right,
-            (left, None) => left,
-            (Some(l), Some(r)) => {
-                if l.priority > r.priority {
-                    let mut l = l;
-                    l.right = Self::merge(l.right, Some(r));
-                    Some(l)
-                } else {
-                    let mut r = r;
-                    r.left = Self::merge(Some(l), r.left);
-                    Some(r)
+        while let Some((i, children_done)) = stack.pop() {
+            let n = self.node(i);
+            if children_done {
+                let k = f(&n.key);
+                keep[i as usize] = k;
+                kept += usize::from(k);
+            } else {
+                stack.push((i, true));
+                for child in [n.child[RIGHT], n.child[LEFT]] {
+                    if child != NIL {
+                        stack.push((child, false));
+                    }
                 }
             }
         }
+        if kept == self.size {
+            return;
+        }
+
+        // Phase 2: compact the arena to the kept nodes (dropping the rest,
+        // including dead slots), remembering where each one moved to.
+        let mut new_index = vec![NIL; self.nodes.len()];
+        let in_order = self.in_order_slots(&keep);
+        let old = std::mem::take(&mut self.nodes);
+        self.nodes.reserve_exact(kept);
+        for (i, node) in old.into_iter().enumerate() {
+            if keep[i] {
+                new_index[i] = self.nodes.len() as Idx;
+                self.nodes.push(Node {
+                    child: [NIL, NIL],
+                    ..node
+                });
+            }
+        }
+        self.free.clear();
+        self.size = kept;
+
+        // Phase 3: rebuild the tree from the kept nodes in key order. A treap
+        // is the Cartesian tree of its keys and priorities, which a stack
+        // builds in linear time; the stack holds the current right spine.
+        let mut spine: Vec<Idx> = Vec::new();
+        for old_i in in_order {
+            let x = new_index[old_i as usize];
+            let p = self.node(x).priority;
+            let mut last = NIL;
+            while let Some(&top) = spine.last() {
+                if self.node(top).priority >= p {
+                    break;
+                }
+                last = top;
+                spine.pop();
+            }
+            self.node_mut(x).child[LEFT] = last;
+            if let Some(&top) = spine.last() {
+                self.node_mut(top).child[RIGHT] = x;
+            }
+            spine.push(x);
+        }
+        self.root = spine.first().copied().unwrap_or(NIL);
     }
 
-    // Rotate the subtree at `link` right: its left child becomes its root
-    fn rotate_right(link: &mut Option<Box<Node<T>>>) {
-        let mut node = link.take().expect("rotate_right on empty link");
-        let mut new_root = node.left.take().expect("rotate_right without left child");
-        node.left = new_root.right.take();
-        new_root.right = Some(node);
-        *link = Some(new_root);
-    }
-
-    // Rotate the subtree at `link` left: its right child becomes its root
-    fn rotate_left(link: &mut Option<Box<Node<T>>>) {
-        let mut node = link.take().expect("rotate_left on empty link");
-        let mut new_root = node.right.take().expect("rotate_left without right child");
-        node.right = new_root.left.take();
-        new_root.left = Some(node);
-        *link = Some(new_root);
-    }
-
-    // Retain nodes that satisfy the predicate, in place and in post-order.
-    // Each node stays attached until the predicate has accepted or rejected
-    // it, so a panic leaves a valid treap; `removed` counts rejected nodes.
-    fn retain_at<F>(link: &mut Option<Box<Node<T>>>, f: &mut F, removed: &mut usize)
-    where
-        F: FnMut(&T) -> bool,
-    {
-        let Some(node) = link else { return };
-        Self::retain_at(&mut node.left, f, removed);
-        Self::retain_at(&mut node.right, f, removed);
-        if !f(&node.key) {
-            let node = link.take().expect("link is non-empty");
-            *link = Self::merge(node.left, node.right);
-            *removed += 1;
+    /// Slots of the nodes marked in `keep`, in key (in-order) order.
+    fn in_order_slots(&self, keep: &[bool]) -> Vec<Idx> {
+        let mut out = Vec::new();
+        let mut stack = Vec::new();
+        let mut i = self.root;
+        loop {
+            while i != NIL {
+                stack.push(i);
+                i = self.node(i).child[LEFT];
+            }
+            match stack.pop() {
+                None => return out,
+                Some(n) => {
+                    if keep[n as usize] {
+                        out.push(n);
+                    }
+                    i = self.node(n).child[RIGHT];
+                }
+            }
         }
     }
 }
@@ -270,6 +397,100 @@ impl<T: Ord> Default for Treap<T> {
     }
 }
 
+/// Read-only views of the tree, for the tests' structural checks.
+#[cfg(test)]
+impl<T> Treap<T> {
+    /// Keys in order (an in-order walk).
+    fn keys(&self) -> Vec<&T> {
+        let mut out = Vec::new();
+        let mut stack = Vec::new();
+        let mut i = self.root;
+        loop {
+            while i != NIL {
+                stack.push(i);
+                i = self.node(i).child[LEFT];
+            }
+            match stack.pop() {
+                None => return out,
+                Some(n) => {
+                    out.push(&self.node(n).key);
+                    assert!(out.len() <= self.nodes.len(), "cycle in tree");
+                    i = self.node(n).child[RIGHT];
+                }
+            }
+        }
+    }
+
+    /// (slot, depth) for every reachable node, in pre-order.
+    fn reachable(&self) -> Vec<(Idx, usize)> {
+        let mut out = Vec::new();
+        let mut stack = Vec::new();
+        if self.root != NIL {
+            stack.push((self.root, 1));
+        }
+        while let Some((i, d)) = stack.pop() {
+            out.push((i, d));
+            assert!(out.len() <= self.nodes.len(), "cycle in tree");
+            let n = self.node(i);
+            for child in [n.child[RIGHT], n.child[LEFT]] {
+                if child != NIL {
+                    stack.push((child, d + 1));
+                }
+            }
+        }
+        out
+    }
+
+    /// Every parent's priority is >= its children's.
+    fn heap_ok(&self) -> bool {
+        self.reachable().iter().all(|&(i, _)| {
+            let n = self.node(i);
+            [n.child[LEFT], n.child[RIGHT]]
+                .into_iter()
+                .all(|c| c == NIL || self.node(c).priority <= n.priority)
+        })
+    }
+
+    /// Height: the number of nodes on the longest root-to-leaf path.
+    fn height(&self) -> usize {
+        self.reachable().iter().map(|&(_, d)| d).max().unwrap_or(0)
+    }
+
+    /// The tree's shape: (key, priority) in pre-order, with `None` for
+    /// empty subtrees, independent of where nodes sit in the arena.
+    fn shape(&self) -> Vec<Option<(&T, u32)>> {
+        let mut out = Vec::new();
+        let mut stack = vec![self.root];
+        while let Some(i) = stack.pop() {
+            assert!(out.len() <= 2 * self.nodes.len() + 1, "cycle in tree");
+            if i == NIL {
+                out.push(None);
+            } else {
+                let n = self.node(i);
+                out.push(Some((&n.key, n.priority)));
+                stack.push(n.child[RIGHT]);
+                stack.push(n.child[LEFT]);
+            }
+        }
+        out
+    }
+
+    /// Arena bookkeeping holds: every slot is either reachable (exactly
+    /// once) or free (exactly once), never both, and `size` counts the
+    /// reachable ones.
+    fn arena_ok(&self) -> bool {
+        let mut seen = vec![0u8; self.nodes.len()];
+        let reachable = self.reachable();
+        for &(i, _) in &reachable {
+            seen[i as usize] += 1;
+        }
+        for &i in &self.free {
+            seen[i as usize] += 1;
+        }
+        reachable.len() == self.size && seen.iter().all(|&c| c == 1)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -277,31 +498,13 @@ mod tests {
     use rand::rngs::StdRng;
 
     // Helper: collect keys via in-order traversal (should yield sorted order for valid BST)
-    fn collect_inorder<T: Ord + Clone>(node: &Option<Box<Node<T>>>) -> Vec<T> {
-        match node {
-            None => vec![],
-            Some(n) => {
-                let mut result = collect_inorder(&n.left);
-                result.push(n.key.clone());
-                result.extend(collect_inorder(&n.right));
-                result
-            }
-        }
+    fn collect_inorder<T: Clone>(treap: &Treap<T>) -> Vec<T> {
+        treap.keys().into_iter().cloned().collect()
     }
 
     // Helper: verify max-heap property (parent priority >= child priorities)
-    fn verify_heap_property<T: Ord>(node: &Option<Box<Node<T>>>) -> bool {
-        match node {
-            None => true,
-            Some(n) => {
-                let left_ok = n.left.as_ref().is_none_or(|l| n.priority >= l.priority);
-                let right_ok = n.right.as_ref().is_none_or(|r| n.priority >= r.priority);
-                left_ok
-                    && right_ok
-                    && verify_heap_property(&n.left)
-                    && verify_heap_property(&n.right)
-            }
-        }
+    fn verify_heap_property<T>(treap: &Treap<T>) -> bool {
+        treap.heap_ok()
     }
 
     #[test]
@@ -398,7 +601,7 @@ mod tests {
         }
 
         // In-order traversal should yield sorted keys
-        let inorder = collect_inorder(&treap.root);
+        let inorder = collect_inorder(&treap);
         let mut sorted = elements.clone();
         sorted.sort();
         assert_eq!(inorder, sorted);
@@ -406,7 +609,7 @@ mod tests {
         // Test after some removals
         treap.remove(&25);
         treap.remove(&75);
-        let inorder_after = collect_inorder(&treap.root);
+        let inorder_after = collect_inorder(&treap);
         let expected: Vec<i32> = sorted.into_iter().filter(|&x| x != 25 && x != 75).collect();
         assert_eq!(inorder_after, expected);
     }
@@ -420,7 +623,7 @@ mod tests {
         for i in 0..100 {
             treap.insert(i, &mut rng);
             assert!(
-                verify_heap_property(&treap.root),
+                verify_heap_property(&treap),
                 "Heap property violated after inserting {}",
                 i
             );
@@ -430,7 +633,7 @@ mod tests {
         for i in (0..100).step_by(3) {
             treap.remove(&i);
             assert!(
-                verify_heap_property(&treap.root),
+                verify_heap_property(&treap),
                 "Heap property violated after removing {}",
                 i
             );
@@ -439,7 +642,7 @@ mod tests {
         // Test after retain
         treap.retain(|&x| x % 2 == 0);
         assert!(
-            verify_heap_property(&treap.root),
+            verify_heap_property(&treap),
             "Heap property violated after retain"
         );
     }
@@ -482,10 +685,10 @@ mod tests {
         assert_eq!(treap.len(), 1000);
 
         // Verify invariants
-        let inorder = collect_inorder(&treap.root);
+        let inorder = collect_inorder(&treap);
         let expected: Vec<i32> = (0..1000).collect();
         assert_eq!(inorder, expected);
-        assert!(verify_heap_property(&treap.root));
+        assert!(verify_heap_property(&treap));
     }
 
     #[test]
