@@ -253,11 +253,16 @@ impl<T: Ord> CVM<T> {
         // 2. Add element back with current probability
         // 3. If buffer is full, remove ~half the elements and halve the probability
         // This creates a geometric sampling scheme that provides an unbiased estimate
-        if self.buf.contains(&elem) {
-            self.buf.remove(&elem);
-        }
+        //
+        // Steps 1 and 2 together leave the element in the buffer if and only if
+        // a coin with heads probability `p` comes up heads, so flip the coin
+        // first. On heads, one insert suffices (it keeps the existing entry if
+        // there is one). On tails the element is usually absent, and a
+        // read-only lookup is the cheapest way to establish that.
         if self.rng.random_bool(self.probability) {
             self.buf.insert(elem, &mut self.rng);
+        } else if self.buf.contains(&elem) {
+            self.buf.remove(&elem);
         }
         while self.buf.len() == self.buf_size {
             self.clear_about_half();
