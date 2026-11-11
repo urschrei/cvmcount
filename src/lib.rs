@@ -5,6 +5,9 @@
 
 mod treap;
 
+#[cfg(test)]
+mod proptests;
+
 use crate::treap::Treap;
 use rand::RngExt;
 use rand::SeedableRng;
