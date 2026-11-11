@@ -20,6 +20,7 @@ rustc-hash = "2.1.1"
 
 [dev-dependencies]
 criterion = "0.8.0"
+hegeltest = { version = "0.52.2", features = ["rand"] }
 
 [lib]
 name = "cvmcount"
