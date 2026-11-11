@@ -8,14 +8,18 @@ use std::{
 
 use criterion::Criterion;
 use cvmcount::CVM;
-use rand::{RngExt, rng};
+use rand::rngs::StdRng;
+use rand::{RngExt, SeedableRng};
 use regex::Regex;
 
 use std::collections::HashSet;
 
 // generate 1 million 7-digit random positive integers
+//
+// The seed is fixed so that every run, on every branch, measures the same
+// stream; otherwise a change in the data shows up as a change in performance.
 fn generate_random_numbers() -> Vec<i32> {
-    let mut rng = rng();
+    let mut rng = StdRng::seed_from_u64(0x00C0_FFEE);
 
     (0..1_000_000)
         .map(|_| rng.random_range(1_000_000..10_000_000))
