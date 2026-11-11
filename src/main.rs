@@ -37,7 +37,7 @@ fn main() {
             .required(true)
             .value_parser(clap::value_parser!(f64))
             )
-        .arg(arg!(-d --delta <DELTA> "The level of certainty that the algorithm's estimate will fall within the desired accuracy range. A higher confidence (e.g., 99.9 %) means you're very sure the estimate will be accurate, while a lower confidence (e.g., 90 %) means there's a higher chance the estimate might be outside the desired range. A delta of 0.1 is a good starting point for most applications")
+        .arg(arg!(-d --delta <DELTA> "The probability that the algorithm's estimate will fall outside the desired accuracy range; your confidence is 1 - delta. A delta of 0.001 means you're 99.9 % sure the estimate will be accurate, while a delta of 0.1 (90 % confidence) means there's a higher chance the estimate might be outside the desired range. A delta of 0.1 is a good starting point for most applications")
             .required(true)
             .value_parser(value_parser!(f64)))
         .arg(arg!(-s --streamsize <STREAM_SIZE> "This is used to determine buffer size and can be a loose approximation. The closer it is to the stream size, the more accurate the results")
@@ -49,7 +49,18 @@ fn main() {
     let epsilon = params.get_one::<f64>("epsilon").unwrap();
     let delta = params.get_one::<f64>("delta").unwrap();
     let stream_size = params.get_one::<usize>("streamsize").unwrap();
-    let mut counter: CVM<String> = CVM::new(*epsilon, *delta, *stream_size);
+    let mut counter: CVM<String> = match CVM::<String>::builder()
+        .epsilon(*epsilon)
+        .delta(*delta)
+        .estimated_size(*stream_size)
+        .build()
+    {
+        Ok(counter) => counter,
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(2);
+        }
+    };
     let re = Regex::new(r"[^\w\s]").unwrap();
 
     let br = open_file(input_file);

@@ -225,13 +225,18 @@ impl<T: Ord> CVM<T> {
     /// For example, `ε = 0.05` means you want your estimate to be within 5 % of the actual value.
     /// An epsilon of `0.8` is a good starting point for most applications.
     ///
-    /// `delta`: The level of certainty that the algorithm's estimate will fall within the desired accuracy range. A higher confidence
-    /// (e.g. 99.9 %) means you're very sure the estimate will be accurate, while a lower confidence (e.g. 90 %) means there's a
-    /// higher chance the estimate might be outside the desired range.
+    /// `delta`: the probability of failure, i.e. that the estimate falls *outside* the desired accuracy range.
+    /// The confidence level is `1 - delta`: a `delta` of `0.001` means you're 99.9 % sure the estimate will be accurate,
+    /// while a `delta` of `0.1` (90 % confidence) means there's a higher chance it won't be.
     /// A `delta` of `0.1` is a good starting point for most applications.
     ///
     /// `stream_size`: this is used to determine buffer size and can be a loose approximation. The closer it is to the stream size,
     /// the more accurate the result will be.
+    ///
+    /// This constructor does not validate its arguments. `epsilon` and `delta` must lie strictly between 0 and 1,
+    /// and `stream_size` must be positive; otherwise (e.g. NaN, or a `stream_size` of 0) the buffer threshold can
+    /// collapse to 0, and the counter silently keeps every distinct element. Use [`CVM::builder`] to have the
+    /// parameters checked.
     pub fn new(epsilon: f64, delta: f64, stream_size: usize) -> Self {
         let bufsize = buffer_size(epsilon, delta, stream_size);
         Self {
