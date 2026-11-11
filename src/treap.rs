@@ -84,11 +84,12 @@ impl<T: Ord> Treap<T> {
 
     /// Insert a key with a random priority
     ///
-    /// Returns `true` if the key was inserted, `false` if it already existed.
+    /// Returns `true` if the key was inserted, `false` if it already existed
+    /// (in which case the existing element is kept unchanged). A priority is
+    /// drawn from `rng` in either case.
     pub fn insert<R: Rng>(&mut self, key: T, rng: &mut R) -> bool {
         let priority = rng.random();
-        let (new_root, inserted) = Self::insert_node(self.root.take(), key, priority);
-        self.root = new_root;
+        let inserted = Self::insert_at(&mut self.root, key, priority);
         if inserted {
             self.size += 1;
         }
@@ -101,13 +102,27 @@ impl<T: Ord> Treap<T> {
     }
 
     /// Remove a key from the treap
+    ///
+    /// Returns `true` if the key was present.
     pub fn remove(&mut self, key: &T) -> bool {
-        let (new_root, removed) = Self::remove_node(self.root.take(), key);
-        self.root = new_root;
-        if removed {
-            self.size -= 1;
+        // Find the link holding the key. All comparisons happen before any
+        // mutation, so a panicking `Ord` leaves the treap untouched.
+        let mut link = &mut self.root;
+        loop {
+            let ord = match link.as_deref() {
+                None => return false,
+                Some(n) => key.cmp(&n.key),
+            };
+            link = match ord {
+                Ordering::Equal => break,
+                Ordering::Less => &mut link.as_mut().expect("link is non-empty").left,
+                Ordering::Greater => &mut link.as_mut().expect("link is non-empty").right,
+            };
         }
-        removed
+        let node = link.take().expect("link holds the key");
+        *link = Self::merge(node.left, node.right);
+        self.size -= 1;
+        true
     }
 
     /// Clear the treap
@@ -118,49 +133,67 @@ impl<T: Ord> Treap<T> {
     }
 
     /// Apply a function to each element, removing those for which it returns false
+    ///
+    /// The predicate is called exactly once per element, in post-order (left
+    /// subtree, right subtree, node), not in key order. If it panics, the
+    /// treap keeps every element it had not yet rejected and remains valid.
     pub fn retain<F>(&mut self, mut f: F)
     where
         F: FnMut(&T) -> bool,
     {
-        let (new_root, new_size) = Self::retain_node(self.root.take(), &mut f);
-        self.root = new_root;
-        self.size = new_size;
+        /// Keeps `size` in step with the tree even if the predicate panics.
+        struct SizeGuard<'a> {
+            size: &'a mut usize,
+            removed: usize,
+        }
+        impl Drop for SizeGuard<'_> {
+            fn drop(&mut self) {
+                *self.size -= self.removed;
+            }
+        }
+        let mut guard = SizeGuard {
+            size: &mut self.size,
+            removed: 0,
+        };
+        Self::retain_at(&mut self.root, &mut f, &mut guard.removed);
     }
 
-    // Helper function to insert a node
-    // Returns (new_tree, was_inserted) tuple
-    fn insert_node(
-        node: Option<Box<Node<T>>>,
-        key: T,
-        priority: u32,
-    ) -> (Option<Box<Node<T>>>, bool) {
-        match node {
-            None => (Some(Box::new(Node::new(key, priority))), true),
-            Some(mut n) => match key.cmp(&n.key) {
-                Ordering::Less => {
-                    let (new_left, inserted) = Self::insert_node(n.left, key, priority);
-                    n.left = new_left;
-                    // Maintain heap property (only rotate if we actually inserted)
-                    let result = if inserted && n.left.as_ref().unwrap().priority > n.priority {
-                        Self::rotate_right(n)
-                    } else {
-                        Some(n)
-                    };
-                    (result, inserted)
+    // Insert below `link`, rotating the new node up to restore heap order.
+    // Comparisons happen on the way down, before any mutation, so a panicking
+    // `Ord` leaves the treap untouched. Returns whether the key was inserted.
+    fn insert_at(link: &mut Option<Box<Node<T>>>, key: T, priority: u32) -> bool {
+        let Some(node) = link else {
+            *link = Some(Box::new(Node::new(key, priority)));
+            return true;
+        };
+        match key.cmp(&node.key) {
+            Ordering::Less => {
+                if !Self::insert_at(&mut node.left, key, priority) {
+                    return false;
                 }
-                Ordering::Greater => {
-                    let (new_right, inserted) = Self::insert_node(n.right, key, priority);
-                    n.right = new_right;
-                    // Maintain heap property (only rotate if we actually inserted)
-                    let result = if inserted && n.right.as_ref().unwrap().priority > n.priority {
-                        Self::rotate_left(n)
-                    } else {
-                        Some(n)
-                    };
-                    (result, inserted)
+                if node
+                    .left
+                    .as_ref()
+                    .is_some_and(|l| l.priority > node.priority)
+                {
+                    Self::rotate_right(link);
                 }
-                Ordering::Equal => (Some(n), false), // Key already exists, do nothing
-            },
+                true
+            }
+            Ordering::Greater => {
+                if !Self::insert_at(&mut node.right, key, priority) {
+                    return false;
+                }
+                if node
+                    .right
+                    .as_ref()
+                    .is_some_and(|r| r.priority > node.priority)
+                {
+                    Self::rotate_left(link);
+                }
+                true
+            }
+            Ordering::Equal => false, // Key already exists, do nothing
         }
     }
 
@@ -176,30 +209,7 @@ impl<T: Ord> Treap<T> {
         }
     }
 
-    // Helper function to remove a node
-    fn remove_node(node: Option<Box<Node<T>>>, key: &T) -> (Option<Box<Node<T>>>, bool) {
-        match node {
-            None => (None, false),
-            Some(mut n) => match key.cmp(&n.key) {
-                Ordering::Less => {
-                    let (new_left, removed) = Self::remove_node(n.left, key);
-                    n.left = new_left;
-                    (Some(n), removed)
-                }
-                Ordering::Greater => {
-                    let (new_right, removed) = Self::remove_node(n.right, key);
-                    n.right = new_right;
-                    (Some(n), removed)
-                }
-                Ordering::Equal => {
-                    // Found the node to remove
-                    (Self::merge(n.left, n.right), true)
-                }
-            },
-        }
-    }
-
-    // Merge two subtrees
+    // Merge two subtrees, where every key in `left` is less than every key in `right`
     fn merge(left: Option<Box<Node<T>>>, right: Option<Box<Node<T>>>) -> Option<Box<Node<T>>> {
         match (left, right) {
             (None, right) => right,
@@ -218,43 +228,38 @@ impl<T: Ord> Treap<T> {
         }
     }
 
-    // Rotate right
-    fn rotate_right(mut node: Box<Node<T>>) -> Option<Box<Node<T>>> {
-        let mut new_root = node.left.take().unwrap();
+    // Rotate the subtree at `link` right: its left child becomes its root
+    fn rotate_right(link: &mut Option<Box<Node<T>>>) {
+        let mut node = link.take().expect("rotate_right on empty link");
+        let mut new_root = node.left.take().expect("rotate_right without left child");
         node.left = new_root.right.take();
         new_root.right = Some(node);
-        Some(new_root)
+        *link = Some(new_root);
     }
 
-    // Rotate left
-    fn rotate_left(mut node: Box<Node<T>>) -> Option<Box<Node<T>>> {
-        let mut new_root = node.right.take().unwrap();
+    // Rotate the subtree at `link` left: its right child becomes its root
+    fn rotate_left(link: &mut Option<Box<Node<T>>>) {
+        let mut node = link.take().expect("rotate_left on empty link");
+        let mut new_root = node.right.take().expect("rotate_left without right child");
         node.right = new_root.left.take();
         new_root.left = Some(node);
-        Some(new_root)
+        *link = Some(new_root);
     }
 
-    // Retain nodes that satisfy the predicate
-    fn retain_node<F>(node: Option<Box<Node<T>>>, f: &mut F) -> (Option<Box<Node<T>>>, usize)
+    // Retain nodes that satisfy the predicate, in place and in post-order.
+    // Each node stays attached until the predicate has accepted or rejected
+    // it, so a panic leaves a valid treap; `removed` counts rejected nodes.
+    fn retain_at<F>(link: &mut Option<Box<Node<T>>>, f: &mut F, removed: &mut usize)
     where
         F: FnMut(&T) -> bool,
     {
-        match node {
-            None => (None, 0),
-            Some(mut n) => {
-                let (new_left, left_size) = Self::retain_node(n.left, f);
-                let (new_right, right_size) = Self::retain_node(n.right, f);
-
-                if f(&n.key) {
-                    n.left = new_left;
-                    n.right = new_right;
-                    (Some(n), left_size + right_size + 1)
-                } else {
-                    // Remove this node by merging its subtrees
-                    let merged = Self::merge(new_left, new_right);
-                    (merged, left_size + right_size)
-                }
-            }
+        let Some(node) = link else { return };
+        Self::retain_at(&mut node.left, f, removed);
+        Self::retain_at(&mut node.right, f, removed);
+        if !f(&node.key) {
+            let node = link.take().expect("link is non-empty");
+            *link = Self::merge(node.left, node.right);
+            *removed += 1;
         }
     }
 }
@@ -545,3 +550,4 @@ mod tests {
         assert!(treap.is_empty());
     }
 }
+
