@@ -17,6 +17,7 @@ use crate::treap::Treap;
 use rand::RngExt;
 use rand::SeedableRng;
 use rand::rngs::{StdRng, SysRng};
+use std::borrow::Borrow;
 
 /// Whether `x` lies in the open interval (0, 1). False for NaN, which every
 /// comparison rejects; writing the check as `x <= 0.0 || x >= 1.0` instead
@@ -271,6 +272,44 @@ impl<T: Ord> CVM<T> {
         } else if self.buf.contains(&elem) {
             self.buf.remove(&elem);
         }
+        self.shrink_while_full();
+    }
+
+    /// Add a borrowed element, potentially updating the unique element count
+    ///
+    /// This gives the same result as [`CVM::process_element`] with
+    /// `elem.to_owned()`, but makes the owned value only if the buffer keeps
+    /// the element and does not already contain it. Use it when the elements
+    /// are borrowed and most are repeats, such as `&str` for a `CVM<String>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cvmcount::CVM;
+    ///
+    /// let mut cvm: CVM<String> = CVM::<String>::builder().build().unwrap();
+    /// for word in "the cat and the hat".split(' ') {
+    ///     cvm.process_borrowed(word);
+    /// }
+    /// assert_eq!(cvm.calculate_final_result(), 4.0);
+    /// ```
+    pub fn process_borrowed<Q>(&mut self, elem: &Q)
+    where
+        T: Borrow<Q>,
+        Q: Ord + ToOwned<Owned = T> + ?Sized,
+    {
+        // The same steps as `process_element`, in the same order, so that
+        // both methods use the RNG identically.
+        if self.rng.random_bool(self.probability) {
+            self.buf.insert_borrowed(elem, &mut self.rng);
+        } else if self.buf.contains(elem) {
+            self.buf.remove(elem);
+        }
+        self.shrink_while_full();
+    }
+
+    // While the buffer is full, clear about half of it and halve the probability
+    fn shrink_while_full(&mut self) {
         while self.buf.len() == self.buf_size {
             self.clear_about_half();
             self.probability /= 2.0;

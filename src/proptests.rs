@@ -341,6 +341,31 @@ fn process_stream_matches_element_loop(tc: TestCase) {
     assert_eq!(via_stream.to_bits(), b.calculate_final_result().to_bits());
 }
 
+/// `process_borrowed` is `process_element` with an owned copy: with the same
+/// seed, the results are identical. The streams are long enough to fill the
+/// buffer, so the probability falls below 1 and repeats can be removed.
+#[hegel::test(test_cases = 1000)]
+fn process_borrowed_matches_element(tc: TestCase) {
+    let epsilon = tc.draw(gs::floats::<f64>().min_value(0.5).max_value_exclusive(1.0));
+    let seed = tc.draw(gs::integers::<u64>());
+    let stream = tc.draw(
+        gs::vecs(gs::integers::<u16>().max_value(2000))
+            .min_size(1000)
+            .max_size(3000),
+    );
+    let words: Vec<String> = stream.iter().map(u16::to_string).collect();
+    let mut owned: CVM<String> = seeded(epsilon, 0.1, 1, seed);
+    let mut borrowed: CVM<String> = seeded(epsilon, 0.1, 1, seed);
+    for w in &words {
+        owned.process_element(w.clone());
+        borrowed.process_borrowed(w.as_str());
+    }
+    assert_eq!(
+        owned.calculate_final_result().to_bits(),
+        borrowed.calculate_final_result().to_bits()
+    );
+}
+
 /// Processing a stream in two `process_stream` calls is the same as one
 /// call on the concatenation: the counter can keep going after a result.
 #[hegel::test(test_cases = 1000)]

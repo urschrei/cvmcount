@@ -57,6 +57,15 @@ impl TreapMachine {
         tc.event_value("len after insert", self.model.len() as f64);
     }
 
+    #[rule(weight = 4)]
+    fn insert_borrowed(&mut self, tc: TestCase) {
+        let k = tc.draw(keys());
+        assert_eq!(
+            self.treap.insert_borrowed(&k, &mut self.rng),
+            self.model.insert(k)
+        );
+    }
+
     #[rule(weight = 3)]
     fn remove(&mut self, tc: TestCase) {
         let k = tc.draw(keys());
