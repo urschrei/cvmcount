@@ -40,6 +40,7 @@
 //! expectation) never translates into recursion depth.
 
 use rand::{Rng, RngExt};
+use std::borrow::Borrow;
 use std::cmp::Ordering;
 
 /// Index of a node in the arena; `NIL` marks an empty subtree.
@@ -236,11 +237,15 @@ impl<T: Ord> Treap<T> {
     }
 
     /// Check if the treap contains a key
-    pub fn contains(&self, key: &T) -> bool {
+    pub fn contains<Q>(&self, key: &Q) -> bool
+    where
+        T: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
         let mut i = self.root;
         while i != NIL {
             let n = self.node(i);
-            let ord = key.cmp(&n.key);
+            let ord = key.cmp(n.key.borrow());
             if ord == Ordering::Equal {
                 return true;
             }
@@ -252,7 +257,11 @@ impl<T: Ord> Treap<T> {
     /// Remove a key from the treap
     ///
     /// Returns `true` if the key was present.
-    pub fn remove(&mut self, key: &T) -> bool {
+    pub fn remove<Q>(&mut self, key: &Q) -> bool
+    where
+        T: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
         // All comparisons happen before any mutation, so a panicking `Ord`
         // leaves the treap untouched.
         let mut link = Link::Root;
@@ -262,7 +271,7 @@ impl<T: Ord> Treap<T> {
                 return false;
             }
             let n = self.node(i);
-            match key.cmp(&n.key) {
+            match key.cmp(n.key.borrow()) {
                 Ordering::Less => {
                     link = Link::Left(i);
                     i = n.child[LEFT];
@@ -537,6 +546,21 @@ mod tests {
         assert_eq!(treap.len(), 2);
 
         assert!(!treap.remove(&3)); // Already removed
+    }
+
+    #[test]
+    fn test_borrowed_keys() {
+        let mut treap: Treap<String> = Treap::new();
+        let mut rng = StdRng::seed_from_u64(42);
+
+        treap.insert("b".to_owned(), &mut rng);
+        treap.insert("a".to_owned(), &mut rng);
+
+        assert!(treap.contains("a"));
+        assert!(!treap.contains("c"));
+        assert!(treap.remove("b"));
+        assert!(!treap.contains("b"));
+        assert_eq!(treap.len(), 1);
     }
 
     #[test]
