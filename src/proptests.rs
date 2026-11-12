@@ -327,11 +327,16 @@ fn estimate_shape_invariants(tc: TestCase) {
 
 /// `process_stream` is `process_element` on each item followed by
 /// `calculate_final_result`: with the same seed, the results are identical.
+/// The buffer holds at most 304 elements here, so a stream of 1000 fills it.
 #[hegel::test(test_cases = 1000)]
 fn process_stream_matches_element_loop(tc: TestCase) {
     let epsilon = tc.draw(gs::floats::<f64>().min_value(0.5).max_value_exclusive(1.0));
     let seed = tc.draw(gs::integers::<u64>());
-    let stream = tc.draw(gs::vecs(gs::integers::<u16>()).max_size(3000));
+    let stream = tc.draw(
+        gs::vecs(gs::integers::<u16>())
+            .min_size(1000)
+            .max_size(3000),
+    );
     let mut a: CVM<u16> = seeded(epsilon, 0.1, 1, seed);
     let mut b: CVM<u16> = seeded(epsilon, 0.1, 1, seed);
     let via_stream = a.process_stream(stream.clone());
@@ -372,7 +377,13 @@ fn process_borrowed_matches_element(tc: TestCase) {
 fn process_stream_is_resumable(tc: TestCase) {
     let epsilon = tc.draw(gs::floats::<f64>().min_value(0.5).max_value_exclusive(1.0));
     let seed = tc.draw(gs::integers::<u64>());
-    let first = tc.draw(gs::vecs(gs::integers::<u16>()).max_size(2000));
+    // The first part fills the buffer, so the second part starts with a
+    // probability below 1.
+    let first = tc.draw(
+        gs::vecs(gs::integers::<u16>())
+            .min_size(1000)
+            .max_size(2000),
+    );
     let second = tc.draw(gs::vecs(gs::integers::<u16>()).max_size(2000));
     let mut split: CVM<u16> = seeded(epsilon, 0.1, 1, seed);
     let mut whole: CVM<u16> = seeded(epsilon, 0.1, 1, seed);
