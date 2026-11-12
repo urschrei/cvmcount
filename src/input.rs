@@ -4,15 +4,19 @@ use std::io::BufRead;
 
 use regex::Regex;
 
-/// Split each line of `reader` into words, clean each word, and give it to `f`.
+/// Split each line of `reader` into words at whitespace, clean each word, and give it to `f`.
 ///
-/// A clean word has no characters other than word characters and whitespace, and is lowercase.
+/// To clean a word, remove all characters that are not word characters, then make it lowercase.
+/// A word that is empty after cleaning is skipped.
 pub fn for_each_word<R: BufRead>(reader: R, mut f: impl FnMut(String)) {
-    let re = Regex::new(r"[^\w\s]").unwrap();
+    let re = Regex::new(r"\W").unwrap();
     reader.lines().for_each(|line| {
-        line.unwrap()
-            .split(' ')
-            .for_each(|word| f(re.replace_all(word, "").to_lowercase()))
+        line.unwrap().split_whitespace().for_each(|word| {
+            let clean = re.replace_all(word, "");
+            if !clean.is_empty() {
+                f(clean.to_lowercase());
+            }
+        })
     });
 }
 
@@ -36,6 +40,19 @@ mod tests {
         assert_eq!(
             words("one two\nthree\r\nfour"),
             ["one", "two", "three", "four"]
+        );
+    }
+
+    #[test]
+    fn splits_on_any_whitespace() {
+        assert_eq!(words("one\ttwo  three"), ["one", "two", "three"]);
+    }
+
+    #[test]
+    fn skips_empty_words() {
+        assert_eq!(
+            words("  leading -- and trailing  \n\n"),
+            ["leading", "and", "trailing"]
         );
     }
 
