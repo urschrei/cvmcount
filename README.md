@@ -17,7 +17,7 @@ In order to overcome this constraint, streaming algorithms have been developed: 
 In this implementation, an element is anything implementing the `Ord` trait: various integer flavours, strings, any Struct on which you have implemented the trait. Not `f32` / `f64`, however (unless wrapped in an ordered wrapper type).
 
 ## Ownership
-The buffer has to keep ownership of its elements. In practice, this is not a problem: relative to its input stream size, the buffer is very small. This is also the point of the algorithm: your data set is very large and your working memory is small; you **don't** want to keep the original data around in order to store references to it! Thus, if you have `&str` elements you will need to create new `String`s to store them. If you're processing text data you'll probably want to strip punctuation and regularise the case, so you'll need new `String`s anyway. If you're processing strings containing numeric values, parsing them to the appropriate integer type (which implements `Copy`) first seems like a reasonable approach.
+The buffer has to keep ownership of its elements. In practice, this is not a problem: relative to its input stream size, the buffer is very small. This is also the point of the algorithm: your data set is very large and your working memory is small; you **don't** want to keep the original data around in order to store references to it! Thus, if you have `&str` elements, the buffer stores new `String`s. `CVM::process_borrowed` takes a `&str` (or any borrowed form of the element type) and makes a `String` only when the buffer keeps a word that it does not already contain. If you're processing text data you'll probably want to strip punctuation and regularise the case, so you'll need new `String`s anyway. If you're processing strings containing numeric values, parsing them to the appropriate integer type (which implements `Copy`) first seems like a reasonable approach.
 
 ## Further Details
 Don Knuth has written about the algorithm at https://cs.stanford.edu/~knuth/papers/cvm-note.pdf, and does a far better job than I do at explaining it.
@@ -41,8 +41,11 @@ You can also build your own if you have Rust installed: `cargo install cvmcount`
 
 ```shell
 cvmcount -t file.txt -e 0.8 -d 0.1 -s 5000
+some-command | cvmcount -t - -e 0.8 -d 0.1 -s 5000
 ```
-`-t --tokens`: a valid path to a text file
+`-t --tokens`: a valid path to a text file, or `-` to read from standard input.
+
+`cvmcount` splits the input into words at ASCII whitespace, removes all characters that are not word characters (letters, marks, digits and connector punctuation such as `_`), and makes each word lowercase. A word that is empty after this step is not counted. Bytes that are not valid UTF-8 are removed in the same way as punctuation. The input is read in fixed-size blocks, so memory use does not increase with line length. If the input cannot be read, `cvmcount` prints an error and exits with status 1.
 
 `-e --epsilon`: how close you want your estimate to be to the true number of distinct tokens. A smaller ε means you require a more precise estimate. For example, ε = 0.05 means you want your estimate to be within 5 % of the actual value. An epsilon of 0.8 is a good starting point for most applications.
 
