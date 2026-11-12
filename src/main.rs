@@ -55,7 +55,7 @@ fn main() {
         }
     };
     if let Err(e) = open_input(input_file)
-        .and_then(|br| input::for_each_word(br, |word| counter.process_element(word)))
+        .and_then(|br| input::for_each_word(br, |word| counter.process_borrowed(word)))
     {
         eprintln!("error: {}: {e}", input_file.display());
         std::process::exit(1);

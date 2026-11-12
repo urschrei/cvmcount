@@ -18,13 +18,28 @@ use regex::Regex;
 /// # Errors
 ///
 /// Returns the first error from `reader`, other than [`io::ErrorKind::Interrupted`].
-pub fn for_each_word<R: BufRead>(mut reader: R, mut f: impl FnMut(String)) -> io::Result<()> {
-    let re = Regex::new(r"\W").unwrap();
+pub fn for_each_word<R: BufRead>(mut reader: R, mut f: impl FnMut(&str)) -> io::Result<()> {
+    let re = Regex::new(r"\w+").unwrap();
+    // One buffer for the clean form of each word, so that most words do not allocate.
+    let mut clean = String::new();
     let mut emit = |bytes: &[u8]| {
+        clean.clear();
+        if bytes.is_ascii() {
+            // For ASCII, `\w` is `[0-9A-Za-z_]`.
+            bytes
+                .iter()
+                .filter(|b| b.is_ascii_alphanumeric() || **b == b'_')
+                .for_each(|b| clean.push(char::from(b.to_ascii_lowercase())));
+            if !clean.is_empty() {
+                f(&clean);
+            }
+            return;
+        }
         let word = String::from_utf8_lossy(bytes);
-        let clean = re.replace_all(&word, "");
+        re.find_iter(&word).for_each(|m| clean.push_str(m.as_str()));
         if !clean.is_empty() {
-            f(clean.to_lowercase());
+            // `str::to_lowercase` applies context rules, such as final sigma.
+            f(&clean.to_lowercase());
         }
     };
     // The start of a word that continues in the next buffer.
@@ -64,7 +79,7 @@ mod tests {
 
     fn words(input: &str) -> Vec<String> {
         let mut out = Vec::new();
-        for_each_word(input.as_bytes(), |w| out.push(w)).unwrap();
+        for_each_word(input.as_bytes(), |w| out.push(w.to_owned())).unwrap();
         out
     }
 
@@ -103,9 +118,22 @@ mod tests {
     }
 
     #[test]
+    fn keeps_digits_and_underscores() {
+        assert_eq!(
+            words("snake_case Word2 (1990)"),
+            ["snake_case", "word2", "1990"]
+        );
+    }
+
+    #[test]
+    fn lowercases_final_sigma() {
+        assert_eq!(words("ΟΔΟΣ"), ["οδος"]);
+    }
+
+    #[test]
     fn replaces_invalid_utf8() {
         let mut out = Vec::new();
-        for_each_word(&b"ok bad\xffbyte\n"[..], |w| out.push(w)).unwrap();
+        for_each_word(&b"ok bad\xffbyte\n"[..], |w| out.push(w.to_owned())).unwrap();
         assert_eq!(out, ["ok", "badbyte"]);
     }
 
@@ -134,7 +162,7 @@ mod tests {
     fn words_with_capacity(input: &[u8], capacity: usize) -> Vec<String> {
         let mut out = Vec::new();
         for_each_word(io::BufReader::with_capacity(capacity, input), |w| {
-            out.push(w)
+            out.push(w.to_owned())
         })
         .unwrap();
         out
