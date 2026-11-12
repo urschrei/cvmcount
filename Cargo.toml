@@ -33,7 +33,7 @@ bench = false
 [[bin]]
 name = "cvmcount"
 path = "src/main.rs"
-test = false
+test = true
 bench = false
 
 [profile.release]

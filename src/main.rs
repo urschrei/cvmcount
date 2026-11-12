@@ -1,12 +1,12 @@
 use clap::{Command, arg, crate_version, value_parser};
-use regex::Regex;
 use std::fs::File;
-use std::io::BufRead;
 use std::io::BufReader;
 use std::path::Path;
 use std::path::PathBuf;
 
 use cvmcount::CVM;
+
+mod input;
 
 fn open_file<P>(filename: P) -> BufReader<File>
 where
@@ -14,14 +14,6 @@ where
 {
     let f = File::open(filename).expect("Couldn't read from file");
     BufReader::new(f)
-}
-
-fn line_to_word(re: &Regex, cvm: &mut CVM<String>, line: &str) {
-    let words = line.split(' ');
-    words.for_each(|word| {
-        let clean_word = re.replace_all(word, "").to_lowercase();
-        cvm.process_element(clean_word)
-    })
 }
 
 fn main() {
@@ -61,11 +53,8 @@ fn main() {
             std::process::exit(2);
         }
     };
-    let re = Regex::new(r"[^\w\s]").unwrap();
-
     let br = open_file(input_file);
-    br.lines()
-        .for_each(|line| line_to_word(&re, &mut counter, &line.unwrap()));
+    input::for_each_word(br, |word| counter.process_element(word));
     println!(
         "Unique tokens: {:?}",
         counter.calculate_final_result() as i32
