@@ -1,6 +1,6 @@
 use clap::{Command, arg, crate_version, value_parser};
 use std::fs::File;
-use std::io::BufReader;
+use std::io::{self, BufRead, BufReader};
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -8,12 +8,14 @@ use cvmcount::CVM;
 
 mod input;
 
-fn open_file<P>(filename: P) -> BufReader<File>
-where
-    P: AsRef<Path>,
-{
-    let f = File::open(filename).expect("Couldn't read from file");
-    BufReader::new(f)
+/// Open `path` for reading. The path `-` is standard input.
+fn open_input(path: &Path) -> Box<dyn BufRead> {
+    if path == Path::new("-") {
+        Box::new(io::stdin().lock())
+    } else {
+        let f = File::open(path).expect("Couldn't read from file");
+        Box::new(BufReader::new(f))
+    }
 }
 
 fn main() {
@@ -22,7 +24,7 @@ fn main() {
         .version(crate_version!())
         .author("Stephan Hügel <urschrei@gmail.com>")
         .about("Use the CVM algorithm to estimate the number of unique tokens in a stream")
-        .arg(arg!(-t --tokens <FILE> "A text file containing words")
+        .arg(arg!(-t --tokens <FILE> "A text file containing words, or - to read from standard input")
             .required(true)
             .value_parser(value_parser!(PathBuf)))
         .arg(arg!(-e --epsilon <EPSILON> "How close you want your estimate to be to the true number of distinct tokens. A smaller ε means you require a more precise estimate. For example, ε = 0.05 means you want your estimate to be within 5 % of the actual value. An epsilon of 0.8 is a good starting point for most applications")
@@ -53,7 +55,7 @@ fn main() {
             std::process::exit(2);
         }
     };
-    let br = open_file(input_file);
+    let br = open_input(input_file);
     input::for_each_word(br, |word| counter.process_element(word));
     println!(
         "Unique tokens: {:?}",
