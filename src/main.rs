@@ -9,12 +9,11 @@ use cvmcount::CVM;
 mod input;
 
 /// Open `path` for reading. The path `-` is standard input.
-fn open_input(path: &Path) -> Box<dyn BufRead> {
+fn open_input(path: &Path) -> io::Result<Box<dyn BufRead>> {
     if path == Path::new("-") {
-        Box::new(io::stdin().lock())
+        Ok(Box::new(io::stdin().lock()))
     } else {
-        let f = File::open(path).expect("Couldn't read from file");
-        Box::new(BufReader::new(f))
+        Ok(Box::new(BufReader::new(File::open(path)?)))
     }
 }
 
@@ -55,8 +54,12 @@ fn main() {
             std::process::exit(2);
         }
     };
-    let br = open_input(input_file);
-    input::for_each_word(br, |word| counter.process_element(word));
+    if let Err(e) = open_input(input_file)
+        .and_then(|br| input::for_each_word(br, |word| counter.process_element(word)))
+    {
+        eprintln!("error: {}: {e}", input_file.display());
+        std::process::exit(1);
+    }
     println!(
         "Unique tokens: {:?}",
         counter.calculate_final_result() as i32
