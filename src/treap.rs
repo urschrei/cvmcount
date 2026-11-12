@@ -186,13 +186,47 @@ impl<T: Ord> Treap<T> {
     /// drawn from `rng` in either case.
     pub fn insert<R: Rng>(&mut self, key: T, rng: &mut R) -> bool {
         let priority = rng.random();
-        // Search, recording the path. All comparisons happen here, before any
-        // mutation, so a panicking `Ord` leaves the treap untouched.
+        if !self.find_path(&key) {
+            return false;
+        }
+        self.attach(key, priority);
+        true
+    }
+
+    /// Insert an owned copy of a borrowed key with a random priority
+    ///
+    /// Same as [`Treap::insert`], but makes the owned key only if the key is
+    /// not already present. A priority is drawn from `rng` in either case, so
+    /// both methods use `rng` identically.
+    pub fn insert_borrowed<Q, R>(&mut self, key: &Q, rng: &mut R) -> bool
+    where
+        T: Borrow<Q>,
+        Q: Ord + ToOwned<Owned = T> + ?Sized,
+        R: Rng,
+    {
+        let priority = rng.random();
+        if !self.find_path(key) {
+            return false;
+        }
+        self.attach(key.to_owned(), priority);
+        true
+    }
+
+    /// Record in `self.path` the path from the root to the place where `key`
+    /// goes. Returns `false` if `key` is already present.
+    ///
+    /// All comparisons happen here, before any mutation, so a panicking `Ord`
+    /// leaves the treap untouched.
+    fn find_path<Q>(&mut self, key: &Q) -> bool
+    where
+        T: Borrow<Q>,
+        Q: Ord + ?Sized,
+    {
         self.path.clear();
         let mut i = self.root;
         while i != NIL {
             let n = &self.nodes[i as usize];
-            let went_left = match key.cmp(&n.key) {
+            let went_left = match key.cmp(n.key.borrow()) {
                 Ordering::Less => true,
                 Ordering::Greater => false,
                 Ordering::Equal => return false,
@@ -204,6 +238,11 @@ impl<T: Ord> Treap<T> {
                 n.child[RIGHT]
             };
         }
+        true
+    }
+
+    /// Add `key` at the end of the path that [`Treap::find_path`] recorded.
+    fn attach(&mut self, key: T, priority: u32) {
         // Attach as a leaf, then rotate up while it outranks its parent.
         let x = self.alloc(key, priority);
         let mut link = match self.path.last() {
@@ -233,7 +272,6 @@ impl<T: Ord> Treap<T> {
             self.set(link, x);
         }
         self.size += 1;
-        true
     }
 
     /// Check if the treap contains a key
