@@ -129,9 +129,43 @@ fn bench_realistic_accuracy(c: &mut Criterion) {
     group.finish();
 }
 
+// Owned and borrowed elements, on the same words: `process_element` needs an
+// owned copy of each word, and `process_borrowed` makes one only when the
+// buffer keeps a new word. Tokenising happens once, outside the timed loop.
+fn bench_owned_borrowed(c: &mut Criterion) {
+    let re = Regex::new(r"\W").unwrap();
+    let mut words = Vec::new();
+    open_file("benches/kiy.txt").lines().for_each(|line| {
+        line.unwrap().split_whitespace().for_each(|word| {
+            let clean = re.replace_all(word, "").to_lowercase();
+            if !clean.is_empty() {
+                words.push(clean);
+            }
+        })
+    });
+    let (epsilon, delta, stream_size) = (0.8, 0.1, 1000);
+    let mut group = c.benchmark_group("The King in Yellow words, e = 0.8, d = 0.1, s = 1000");
+    group.bench_function("process_element with a clone", |b| {
+        b.iter(|| {
+            let mut cvm: CVM<String> = CVM::new(epsilon, delta, stream_size);
+            words.iter().for_each(|w| cvm.process_element(w.clone()));
+            cvm.calculate_final_result()
+        })
+    });
+    group.bench_function("process_borrowed", |b| {
+        b.iter(|| {
+            let mut cvm: CVM<String> = CVM::new(epsilon, delta, stream_size);
+            words.iter().for_each(|w| cvm.process_borrowed(w.as_str()));
+            cvm.calculate_final_result()
+        })
+    });
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_count_strings_integers,
-    bench_realistic_accuracy
+    bench_realistic_accuracy,
+    bench_owned_borrowed
 );
 criterion_main!(benches);
