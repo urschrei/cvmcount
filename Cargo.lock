@@ -335,9 +335,9 @@ dependencies = [
 
 [[package]]
 name = "hegeltest"
-version = "0.52.2"
+version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1747a2cc6f35b8b7cd64d8934513074275c35d753e97eb5d021406580bfc2645"
+checksum = "eadd91ef63aef2de1cfa586495cac7a6416201ca1ba3f0cfb91d49f4f280c0e9"
 dependencies = [
  "hegeltest-macros",
  "parking_lot",
@@ -346,9 +346,9 @@ dependencies = [
 
 [[package]]
 name = "hegeltest-macros"
-version = "0.52.2"
+version = "0.52.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e5b90edbcfbc33749cb3f9dd0de7a178656d3980d3f53060ca5dffc5ff4206f0"
+checksum = "fe13dba099a4fec1cb3aff54785e3cbf76b682241ac2fcb6d867e486ff21f505"
 dependencies = [
  "proc-macro2",
  "quote",
